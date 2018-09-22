@@ -284,7 +284,7 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
-  play = true;
+  play = false;
 
   show_score(34, 4, hi_score);
 
@@ -303,11 +303,38 @@ void main() {
        print("Joystick y: ");
        print_hex(jy, 2);
        print("\n");
+       uint8_t ax = i2c_read();
+       print("Accel  x: ");
+       print_hex(ax, 2);
+       print("\n");
+       uint8_t ay = i2c_read();
+       print("Accel  x: ");
+       print_hex(ay, 2);
+       print("\n");
+       uint8_t az = i2c_read();
+       print("Accel  x: ");
+       print_hex(az, 2);
+       print("\n");
+       uint8_t rest = i2c_read();
+       print("Buttons: ");
+       print_hex(rest & 3, 2);
+       print("\n");
+      
+       uint8_t buttons = rest & 3;
 
+       if (buttons < 2) { //Start or restart
+         setup_screen();
+         set_up_board();
+         pac_x = 0;
+         pac_y = 13;
+         score = 0;
+         play = (buttons == 0);;
+
+       }
+ 
        show_score(34, 8, score);
 
        /* update sprite locations */
-
        int n = board[pac_y][pac_x];
 
        if (play) {
@@ -330,7 +357,7 @@ void main() {
           vid_set_tile(pac_x*2 + 1, pac_y*2 + 2, BLANK_TILE);
           vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
           score += 10;
-          board[pac_y][pac_x] & ~FOOD;
+          board[pac_y][pac_x] &= ~FOOD;
        }    
           
        old2_x = old_x;
