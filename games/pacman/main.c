@@ -29,10 +29,16 @@ extern const struct song_t song_pacman;
 #define FOOD 16
 
 #define BLANK_TILE 0
+
 #define FOOD_TILE1 4
 #define FOOD_TILE2 5
 #define FOOD_TILE3 12
 #define FOOD_TILE4 13
+
+#define BIG_FOOD_TILE1 40
+#define BIG_FOOD_TILE2 41
+#define BIG_FOOD_TILE3 48
+#define BIG_FOOD_TILE4 49
 
 #define ZERO_TILE 16
 
@@ -84,28 +90,28 @@ void set_up_board() {
       uint8_t n = 0;
       uint8_t t = tile_data[((y*2 + 1) << 5) + x*2 + 1];
 
-      if (t != BLANK_TILE && t != FOOD_TILE1) continue;
+      if (t != BLANK_TILE && t != FOOD_TILE1 && t != BIG_FOOD_TILE1) continue;
 
-      if (t == FOOD_TILE1) n |= FOOD;
+      if (t == FOOD_TILE1 || t == BIG_FOOD_TILE1) n |= FOOD;
 
       if (y > 0) {
         uint8_t above = tile_data[(((y-1)*2 + 2) << 5) + x*2 + 1];
-        if (above == BLANK_TILE || above == FOOD_TILE3) n |= CAN_GO_UP;
+        if (above == BLANK_TILE || above == FOOD_TILE3 || above == BIG_FOOD_TILE3) n |= CAN_GO_UP;
       }
 
       if (y < 13) {
         uint8_t below = tile_data[(((y+1)*2 + 1) << 5) + x*2 + 1];
-        if (below == BLANK_TILE || below == FOOD_TILE1) n |= CAN_GO_DOWN;
+        if (below == BLANK_TILE || below == FOOD_TILE1 || below == BIG_FOOD_TILE1) n |= CAN_GO_DOWN;
       }
 
       if (x > 0) {
         uint8_t left = tile_data[((y*2 + 1) << 5) + (x-1)*2 + 2];
-        if (left == BLANK_TILE || left == FOOD_TILE2) n |= CAN_GO_LEFT;
+        if (left == BLANK_TILE || left == FOOD_TILE2 || left == BIG_FOOD_TILE2) n |= CAN_GO_LEFT;
       }
 
       if (x < 14) {
         uint8_t right = tile_data[((y*2 + 1) << 5) + (x+1)*2 + 1];
-        if (right == BLANK_TILE || right == FOOD_TILE1) n |= CAN_GO_RIGHT;
+        if (right == BLANK_TILE || right == FOOD_TILE1 || right == BIG_FOOD_TILE1) n |= CAN_GO_RIGHT;
       }
 
       board[y][x] = n;
@@ -272,10 +278,6 @@ void main() {
   score = 0;
   hi_score = 10000;
 
-  vid_set_tile(32, 7, ZERO_TILE + 1);
-  vid_set_tile(33, 7, U_TILE);
-  vid_set_tile(34, 7, P_TILE);
-
   vid_set_tile(32,2, H_TILE);
   vid_set_tile(33,2, I_TILE);
   vid_set_tile(35,2, S_TILE);
@@ -366,6 +368,17 @@ void main() {
        old_y = pac_y;
       
        ghost_up ^= 1;
+
+       if (ghost_up) {
+         vid_set_tile(32, 7, ZERO_TILE + 1);
+         vid_set_tile(33, 7, U_TILE);
+         vid_set_tile(34, 7, P_TILE);
+       } else {
+         vid_set_tile(32, 7, BLANK_TILE);
+         vid_set_tile(33, 7, BLANK_TILE);
+         vid_set_tile(34, 7, BLANK_TILE);
+       }
+
        vid_set_sprite_pos(inky, TILE_SIZE + (inky_x << 4), 
                                    TILE_SIZE + ((inky_y - ghost_up) << 4));
        vid_set_sprite_pos(pinky, TILE_SIZE + (pinky_x << 4), 
