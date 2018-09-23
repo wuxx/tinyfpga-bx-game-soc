@@ -27,6 +27,7 @@ extern const struct song_t song_pacman;
 #define CAN_GO_UP 4
 #define CAN_GO_DOWN 8
 #define FOOD 16
+#define BIG_FOOD 32
 
 #define BLANK_TILE 0
 
@@ -53,6 +54,11 @@ extern const struct song_t song_pacman;
 #define R_TILE 37
 #define E_TILE 38
 
+#define DEBUG 1
+
+#define FOOD_POINTS 10
+#define BIG_FOOD_POINTS 50
+
 const uint8_t pacman = 0;
 const uint8_t inky = 1;
 const uint8_t pinky = 2;
@@ -63,12 +69,12 @@ uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
 uint32_t led_state = 0x00000000;
 
 uint8_t board[14][15];
-uint8_t pac_image, pac_x, pac_y;
+uint8_t pacman_image, pac_x, pac_y, ghost_image;
 uint8_t inky_x, blinky_x, pinky_x, clyde_x;
 uint8_t inky_y, blinky_y, pinky_y, clyde_y;
 uint8_t ghost_up;
 uint16_t score, hi_score;
-bool play;
+bool play, show_1up;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -84,7 +90,7 @@ uint32_t set_timer_counter(uint32_t val); asm (
     "ret\n"
 );
 
-void set_up_board() {
+void setup_board() {
   for(int y = 0; y < 14; y++) {
     for(int x = 0;  x < 15; x++) {
       uint8_t n = 0;
@@ -92,7 +98,8 @@ void set_up_board() {
 
       if (t != BLANK_TILE && t != FOOD_TILE1 && t != BIG_FOOD_TILE1) continue;
 
-      if (t == FOOD_TILE1 || t == BIG_FOOD_TILE1) n |= FOOD;
+      if (t == FOOD_TILE1 || t == FOOD_TILE1) n |= FOOD;
+      if (t == FOOD_TILE1 || t == BIG_FOOD_TILE1) n |= BIG_FOOD;
 
       if (y > 0) {
         uint8_t above = tile_data[(((y-1)*2 + 2) << 5) + x*2 + 1];
@@ -155,7 +162,8 @@ void setup_screen() {
     }
   }
 
-  pac_image = 0;
+  pacman_image = 1;
+  ghost_image = 0;
 
   pac_x = 0;
   pac_y = 13;
@@ -168,7 +176,8 @@ void setup_screen() {
   clyde_x = 7;
   clyde_y = 9;
 
-  vid_write_sprite_memory(pac_image, sprites[pacman]);
+  vid_write_sprite_memory(pacman_image, pacman_sprites[pacman_image]);
+  vid_write_sprite_memory(ghost_image, ghost_sprites[ghost_image]);
   
   vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
   vid_set_sprite_pos(inky, 8 + (inky_x << 4), 8 + (inky_y << 4));
@@ -182,11 +191,11 @@ void setup_screen() {
   vid_set_sprite_colour(blinky, 2);
   vid_set_sprite_colour(clyde, 1);
 
-  vid_set_image_for_sprite(pacman, pac_image);
-  vid_set_image_for_sprite(inky, pac_image);
-  vid_set_image_for_sprite(pinky, pac_image);
-  vid_set_image_for_sprite(blinky, pac_image);
-  vid_set_image_for_sprite(clyde, pac_image);
+  vid_set_image_for_sprite(pacman, pacman_image);
+  vid_set_image_for_sprite(inky, ghost_image);
+  vid_set_image_for_sprite(pinky, ghost_image);
+  vid_set_image_for_sprite(blinky, ghost_image);
+  vid_set_image_for_sprite(clyde, ghost_image);
 
   vid_enable_sprite(pacman, 1);
   vid_enable_sprite(inky, 1);
@@ -216,7 +225,6 @@ void irq_handler(uint32_t irqs, uint32_t* regs)
     reg_leds = led_state;
     songplayer_tick();
   }
-
 }
 
 const int divisor[] = {10000,1000,100,10};
@@ -249,23 +257,17 @@ void delay(uint32_t n) {
 
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
-  print("\n\nBooting..\n");
-  print("Enabling IRQs..\n");
   set_irq_mask(0x00);
 
   setup_screen();
     
-  set_up_board();
+  setup_board();
   print_board();
 
   songplayer_init(&song_pacman);
 
-  print("Switching to dual IO SPI mode..\n");
-
   // switch to dual IO mode
   reg_spictrl = (reg_spictrl & ~0x007F0000) | 0x00400000;
-
-  print("Playing song and blinking\n");
 
   // set timer interrupt to happen 1/50th sec from now
   // (the music routine runs from the timer interrupt)
@@ -278,6 +280,7 @@ void main() {
   score = 0;
   hi_score = 10000;
 
+  // Score HI-SCORE
   vid_set_tile(32,2, H_TILE);
   vid_set_tile(33,2, I_TILE);
   vid_set_tile(35,2, S_TILE);
@@ -286,107 +289,125 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
-  play = false;
-
   show_score(34, 4, hi_score);
+
+  play = false;
+  show_1up = true;
+
+  // Show 1UP
+  vid_set_tile(32, 7, ZERO_TILE + 1);
+  vid_set_tile(33, 7, U_TILE);
+  vid_set_tile(34, 7, P_TILE);
+
 
   uint32_t time_waster = 0;
   while (1) {
     time_waster = time_waster + 1;
     if ((time_waster & 0xfff) == 0xfff) {
 
-       i2c_send_cmd(0x00, 0x00);
-       delay(100);
-       uint8_t jx = i2c_read();
-       print("Joystick x: ");
-       print_hex(jx, 2);
-       print("\n");
-       uint8_t jy = i2c_read();
-       print("Joystick y: ");
-       print_hex(jy, 2);
-       print("\n");
-       uint8_t ax = i2c_read();
-       print("Accel  x: ");
-       print_hex(ax, 2);
-       print("\n");
-       uint8_t ay = i2c_read();
-       print("Accel  x: ");
-       print_hex(ay, 2);
-       print("\n");
-       uint8_t az = i2c_read();
-       print("Accel  x: ");
-       print_hex(az, 2);
-       print("\n");
-       uint8_t rest = i2c_read();
-       print("Buttons: ");
-       print_hex(rest & 3, 2);
-       print("\n");
-      
-       uint8_t buttons = rest & 3;
+      i2c_send_cmd(0x00, 0x00);
+      delay(100);
+      uint8_t jx = i2c_read();
+#ifdef debug
+      print("Joystick x: ");
+      print_hex(jx, 2);
+      print("\n");
+#endif
+      uint8_t jy = i2c_read();
+#ifdef debug
+      print("Joystick y: ");
+      print_hex(jy, 2);
+      print("\n:1");
+#endif
+      uint8_t ax = i2c_read();
+#ifdef debug
+      print("Accel  x: ");
+      print_hex(ax, 2);
+      print("\n");
+#endif
+      uint8_t ay = i2c_read();
+#ifdef debug
+      print("Accel  x: ");
+      print_hex(ay, 2);
+      print("\n");
+#endif
+      uint8_t az = i2c_read();
+#ifdef debug
+      print("Accel  x: ");
+      print_hex(az, 2);
+      print("\n");
+#endif
+      uint8_t rest = i2c_read();
+#ifdef debug
+      print("Buttons: ");
+      print_hex(rest & 3, 2);
+      print("\n");
+#endif      
+      uint8_t buttons = rest & 3;
 
-       if (buttons < 2) { //Start or restart
-         setup_screen();
-         set_up_board();
-         pac_x = 0;
-         pac_y = 13;
-         score = 0;
-         play = (buttons == 0);;
+      if (buttons < 2) { //Start or restart
+        setup_screen();
+        setup_board();
+        pac_x = 0;
+        pac_y = 13;
+        score = 0;
+        play = (buttons == 0);;
+      }
 
-       }
- 
-       show_score(34, 8, score);
+      show_score(34, 8, score);
 
-       /* update sprite locations */
-       int n = board[pac_y][pac_x];
+      /* update sprite locations */
+      int n = board[pac_y][pac_x];
 
-       if (play) {
-          if (pac_x< 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) pac_x++;
-          else if (pac_x > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) pac_x--;
-          else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) pac_y++;
-          else if (pac_y > 1 && jy > 0xc0 && (n & CAN_GO_UP)) pac_y--;
-       } else {
-         if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) pac_y--;
-         else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) pac_x++;
-         else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) pac_y++;
-         else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) pac_x--;
-       }
-   
-       vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
+      if (play) {
+         if (pac_x< 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) pac_x++;
+         else if (pac_x > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) pac_x--;
+         else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) pac_y++;
+         else if (pac_y > 0 && jy > 0xc0 && (n & CAN_GO_UP)) pac_y--;
+      } else {
+        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) pac_y--;
+        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) pac_x++;
+        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) pac_y++;
+        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) pac_x--;
+      }
+  
+      vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
 
-       if (n & FOOD) {
-          vid_set_tile(pac_x*2 + 1, pac_y*2 + 1, BLANK_TILE);
-          vid_set_tile(pac_x*2 + 2, pac_y*2 + 1, BLANK_TILE);
-          vid_set_tile(pac_x*2 + 1, pac_y*2 + 2, BLANK_TILE);
-          vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
-          score += 10;
-          board[pac_y][pac_x] &= ~FOOD;
-       }    
-          
-       old2_x = old_x;
-       old2_y = old_y;
-       old_x = pac_x;
-       old_y = pac_y;
-      
-       ghost_up ^= 1;
+      n = board[pac_y][pac_x];
+      if (n & FOOD || n & BIG_FOOD) {
+         vid_set_tile(pac_x*2 + 1, pac_y*2 + 1, BLANK_TILE);
+         vid_set_tile(pac_x*2 + 2, pac_y*2 + 1, BLANK_TILE);
+         vid_set_tile(pac_x*2 + 1, pac_y*2 + 2, BLANK_TILE);
+         vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
+         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : FOOD_POINTS);
+         board[pac_y][pac_x] &= ~(FOOD | BIG_FOOD);
+      }    
+         
+      old2_x = old_x;
+      old2_y = old_y;
+      old_x = pac_x;
+      old_y = pac_y;
+     
+      ghost_up ^= 1;
 
-       if (ghost_up) {
-         vid_set_tile(32, 7, ZERO_TILE + 1);
-         vid_set_tile(33, 7, U_TILE);
-         vid_set_tile(34, 7, P_TILE);
-       } else {
-         vid_set_tile(32, 7, BLANK_TILE);
-         vid_set_tile(33, 7, BLANK_TILE);
-         vid_set_tile(34, 7, BLANK_TILE);
-       }
-
-       vid_set_sprite_pos(inky, TILE_SIZE + (inky_x << 4), 
-                                   TILE_SIZE + ((inky_y - ghost_up) << 4));
-       vid_set_sprite_pos(pinky, TILE_SIZE + (pinky_x << 4), 
-                                   TILE_SIZE + ((pinky_y - ghost_up) << 4));
-       vid_set_sprite_pos(blinky, TILE_SIZE + (blinky_x << 4), 
-                                   TILE_SIZE + ((blinky_y - ghost_up) << 4));
+      vid_set_sprite_pos(inky, TILE_SIZE + (inky_x << 4), 
+                               TILE_SIZE + ((inky_y - ghost_up) << 4));
+      vid_set_sprite_pos(pinky, TILE_SIZE + (pinky_x << 4), 
+                                TILE_SIZE + ((pinky_y - ghost_up) << 4));
+      vid_set_sprite_pos(blinky, TILE_SIZE + (blinky_x << 4), 
+                                 TILE_SIZE + ((blinky_y - ghost_up) << 4));
        vid_set_sprite_pos(clyde, TILE_SIZE + (clyde_x << 4), 
-                                   TILE_SIZE + ((clyde_y - ghost_up) << 4));
-     }
+                                 TILE_SIZE + ((clyde_y - ghost_up) << 4));
+    } else if ((time_waster & 0x7fff) == 0x7fff) {
+      if (show_1up) {
+        vid_set_tile(32, 7, ZERO_TILE + 1);
+        vid_set_tile(33, 7, U_TILE);
+        vid_set_tile(34, 7, P_TILE);
+      } else {
+        vid_set_tile(32, 7, BLANK_TILE);
+        vid_set_tile(33, 7, BLANK_TILE);
+        vid_set_tile(34, 7, BLANK_TILE);
+      }
+    }
   }
 }
