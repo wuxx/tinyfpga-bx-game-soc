@@ -371,7 +371,7 @@ void main() {
       tick_counter++;
 
       // Get Nunchuk data
-      i2c_send_cmd(0x00, 0x00);
+      i2c_send_reg(0x00);
       delay(100);
 
       uint8_t jx = i2c_read();
@@ -508,6 +508,7 @@ void main() {
         vid_set_tile(32, 7, ZERO_TILE + 1);
         vid_set_tile(33, 7, U_TILE);
         vid_set_tile(34, 7, P_TILE);
+
       } else {
         vid_set_tile(32, 7, BLANK_TILE);
         vid_set_tile(33, 7, BLANK_TILE);
