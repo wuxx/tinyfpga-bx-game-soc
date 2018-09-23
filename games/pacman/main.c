@@ -10,7 +10,9 @@
 
 #include "graphics_data.h"
 
-#define TILE_SIZE 8
+#define debug 1
+
+#define abs(x) (x < 0 ? -x : x)
 
 // a pointer to this is a null pointer, but the compiler does not
 // know that because "sram" is a linker symbol from sections.lds.
@@ -21,6 +23,8 @@ extern uint32_t sram;
 #define reg_leds  (*(volatile uint32_t*)0x03000000)
 
 extern const struct song_t song_pacman;
+
+#define TILE_SIZE 8
 
 #define CAN_GO_LEFT 1
 #define CAN_GO_RIGHT 2
@@ -54,10 +58,14 @@ extern const struct song_t song_pacman;
 #define R_TILE 37
 #define E_TILE 38
 
-#define DEBUG 1
-
+#define CHERRY_TILE 42
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
+
+#define UP 2
+#define DOWN 1
+#define LEFT 3
+#define RIGHT 0
 
 const uint8_t pacman = 0;
 const uint8_t inky = 1;
@@ -72,9 +80,17 @@ uint8_t board[14][15];
 uint8_t pacman_image, pac_x, pac_y, ghost_image;
 uint8_t inky_x, blinky_x, pinky_x, clyde_x;
 uint8_t inky_y, blinky_y, pinky_y, clyde_y;
-uint8_t ghost_up;
 uint16_t score, hi_score;
-bool play, show_1up;
+bool play, chomp;
+uint8_t direction;
+uint8_t pacman_images[8];
+uint8_t ghost_images[8];
+bool hunting;
+uint32_t tick_counter;
+uint16_t food_items;
+bool game_over;
+int level;
+int num_cherries;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -90,7 +106,16 @@ uint32_t set_timer_counter(uint32_t val); asm (
     "ret\n"
 );
 
+void clear_screen() {
+ for (int x = 0; x < 32; x++) {
+    for (int y = 0; y < 32; y++) {
+      vid_set_tile(x,y,BLANK_TILE);
+    }
+  } 
+}
+
 void setup_board() {
+  food_items = 0;
   for(int y = 0; y < 14; y++) {
     for(int x = 0;  x < 15; x++) {
       uint8_t n = 0;
@@ -98,8 +123,13 @@ void setup_board() {
 
       if (t != BLANK_TILE && t != FOOD_TILE1 && t != BIG_FOOD_TILE1) continue;
 
-      if (t == FOOD_TILE1 || t == FOOD_TILE1) n |= FOOD;
-      if (t == FOOD_TILE1 || t == BIG_FOOD_TILE1) n |= BIG_FOOD;
+      if (t == FOOD_TILE1) {
+        n |= FOOD;
+        food_items++;
+      } else if (t == BIG_FOOD_TILE1) {
+        n |= BIG_FOOD;
+        food_items++;
+      }
 
       if (y > 0) {
         uint8_t above = tile_data[(((y-1)*2 + 2) << 5) + x*2 + 1];
@@ -137,6 +167,20 @@ void print_board() {
   }
 }  
 
+void reset_positions() {
+  pac_x = 0;
+  pac_y = 13;
+  inky_x = 7;
+  inky_y = 7;
+  pinky_x = 6;
+  pinky_y = 10;
+  blinky_x = 7;
+  blinky_y = 10;
+  clyde_x = 8;
+  clyde_y = 10;
+  num_cherries = 1;
+}
+
 void setup_screen() {
   vid_init();
   vid_set_x_ofs(0);
@@ -162,22 +206,15 @@ void setup_screen() {
     }
   }
 
-  pacman_image = 1;
-  ghost_image = 0;
+  reset_positions();
 
-  pac_x = 0;
-  pac_y = 13;
-  inky_x = 6;
-  inky_y = 10;
-  pinky_x = 7;
-  pinky_y = 10;
-  blinky_x = 8;
-  blinky_y = 10;
-  clyde_x = 7;
-  clyde_y = 9;
+  for(int i=0;i<8;i++) pacman_images[i] = i;
+  for(int i=0; i<8; i++) vid_write_sprite_memory(pacman_images[i], pacman_sprites[i]);
+  pacman_image = pacman_images[0];
 
-  vid_write_sprite_memory(pacman_image, pacman_sprites[pacman_image]);
-  vid_write_sprite_memory(ghost_image, ghost_sprites[ghost_image]);
+  for(int i=0;i<8;i++) ghost_images[i] = 8+i;
+  for(int i=0; i<8; i++) vid_write_sprite_memory(ghost_images[i], ghost_sprites[i]);
+  ghost_image = ghost_images[0];
   
   vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
   vid_set_sprite_pos(inky, 8 + (inky_x << 4), 8 + (inky_y << 4));
@@ -202,6 +239,16 @@ void setup_screen() {
   vid_enable_sprite(pinky, 1);
   vid_enable_sprite(blinky, 1);
   vid_enable_sprite(clyde, 1);
+}
+
+
+void show_cherries() {
+  for(int i=0;i<num_cherries;i++) {
+    vid_set_tile(32,15, CHERRY_TILE);
+    vid_set_tile(33,15, CHERRY_TILE+1);
+    vid_set_tile(32,16, CHERRY_TILE+8);
+    vid_set_tile(33,16, CHERRY_TILE+9);
+  }
 }
 
 void irq_handler(uint32_t irqs, uint32_t* regs)
@@ -238,17 +285,38 @@ void show_score(int x, int y, int score) {
     if (i == 4) d = s;
     else {
       int div = divisor[i];
-      while (s >= 0) {
+      while (s >= div) {
         s -= div;
         d++;
       } 
-      d--;
-      s += div;
       if (d !=0) blank = false;
     }
     int tile = blank && i != 4 ? BLANK_TILE : ZERO_TILE + d;
     vid_set_tile(x+i, y, tile);
   }
+}
+
+void move_inky() {
+  uint8_t n = board[inky_y][inky_x];
+
+  if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
+  else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+  else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
+  else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
+  else if (n & CAN_GO_LEFT) inky_x--;
+  else if (n & CAN_GO_RIGHT) inky_x++;
+  else if (n & CAN_GO_DOWN) inky_y--;
+  else if (n & CAN_GO_UP) inky_y++;
+}
+
+
+void move_pinky() {
+}
+
+void move_blinky() {
+}
+
+void move_clyde() {
 }
 
 void delay(uint32_t n) {
@@ -292,51 +360,55 @@ void main() {
   show_score(34, 4, hi_score);
 
   play = false;
-  show_1up = true;
 
-  // Show 1UP
-  vid_set_tile(32, 7, ZERO_TILE + 1);
-  vid_set_tile(33, 7, U_TILE);
-  vid_set_tile(34, 7, P_TILE);
-
+  // Show cherries
+  show_cherries();
 
   uint32_t time_waster = 0;
   while (1) {
     time_waster = time_waster + 1;
     if ((time_waster & 0xfff) == 0xfff) {
+      tick_counter++;
 
+      // Get Nunchuk data
       i2c_send_cmd(0x00, 0x00);
       delay(100);
+
       uint8_t jx = i2c_read();
 #ifdef debug
       print("Joystick x: ");
       print_hex(jx, 2);
       print("\n");
 #endif
+
       uint8_t jy = i2c_read();
 #ifdef debug
       print("Joystick y: ");
       print_hex(jy, 2);
       print("\n:1");
 #endif
+
       uint8_t ax = i2c_read();
 #ifdef debug
       print("Accel  x: ");
       print_hex(ax, 2);
       print("\n");
 #endif
+
       uint8_t ay = i2c_read();
 #ifdef debug
       print("Accel  x: ");
       print_hex(ay, 2);
       print("\n");
 #endif
+
       uint8_t az = i2c_read();
 #ifdef debug
       print("Accel  x: ");
       print_hex(az, 2);
       print("\n");
 #endif
+
       uint8_t rest = i2c_read();
 #ifdef debug
       print("Buttons: ");
@@ -345,61 +417,94 @@ void main() {
 #endif      
       uint8_t buttons = rest & 3;
 
-      if (buttons < 2) { //Start or restart
+      // Check buttons for start or restart
+      if (buttons < 2) { 
         setup_screen();
         setup_board();
-        pac_x = 0;
-        pac_y = 13;
         score = 0;
-        play = (buttons == 0);;
+        play = (buttons == 0);
       }
 
-      show_score(34, 8, score);
+      // Save last position and one before last
+      old2_x = old_x;
+      old2_y = old_y;
+      old_x = pac_x;
+      old_y = pac_y;
 
-      /* update sprite locations */
+      /* Update Pacman location. If playing, pacman is moved by joystick, otherwise moves himself.
+         Direction of moves is determined and chomp alternates as pacman moves. */
       int n = board[pac_y][pac_x];
 
       if (play) {
-         if (pac_x< 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) pac_x++;
-         else if (pac_x > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) pac_x--;
-         else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) pac_y++;
-         else if (pac_y > 0 && jy > 0xc0 && (n & CAN_GO_UP)) pac_y--;
-      } else {
-        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) pac_y--;
-        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) pac_x++;
-        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) pac_y++;
-        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) pac_x--;
+         if (pac_x< 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) {chomp = !chomp; pac_x++; direction=RIGHT;}
+
+         else if (pac_x > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) {chomp = !chomp; pac_x--; direction=LEFT;}
+         else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) {chomp = !chomp; pac_y++; direction=DOWN;}
+         else if (pac_y > 0 && jy > 0xc0 && (n & CAN_GO_UP)) {chomp = !chomp; pac_y--; direction=UP;}
+       } else {
+        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) {chomp = !chomp;pac_y--; direction=UP;}
+        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) {chomp = !chomp;pac_x++; direction=RIGHT;}
+        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) {chomp = !chomp;pac_y++; direction=DOWN;}
+        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) {chomp = ! chomp;pac_x--; direction=LEFT;}
       }
-  
+
+      // Set Pacman sprite position
       vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
 
+      // Move inky
+      if ((time_waster & 0x7FFF) == 0x7FFF) move_inky();
+
+      // Check for death
+      if (pac_x == inky_x && pac_y == inky_y) {
+        clear_screen();
+        game_over;
+        pac_x = 3; pac_y = 3;
+        inky_x = 5; inky_y = 3;
+        pinky_x = 7; pinky_y = 3;
+        blinky_x = 9; blinky_y = 3;
+        clyde_x = 11; clyde_y = 3;
+      }
+
+      // Set the approriate Pacman image
+      vid_set_image_for_sprite(pacman, pacman_images[chomp ?  pacman_images[1 + direction] : 0]);
+
+      // Set ghost sprite positions 
+      bool ghost_up = tick_counter & 1; 
+      vid_set_sprite_pos(inky, TILE_SIZE + (inky_x << 4), 
+                               TILE_SIZE + (inky_y << 4));
+      vid_set_sprite_pos(pinky, TILE_SIZE + (pinky_x << 4), 
+                                TILE_SIZE + ((pinky_y - ghost_up) << 4));
+      vid_set_sprite_pos(blinky, TILE_SIZE + (blinky_x << 4), 
+                                 TILE_SIZE + ((blinky_y - ghost_up) << 4));
+      vid_set_sprite_pos(clyde, TILE_SIZE + (clyde_x << 4), 
+                                 TILE_SIZE + ((clyde_y - ghost_up) << 4));
+
+      // Eat your food
       n = board[pac_y][pac_x];
       if (n & FOOD || n & BIG_FOOD) {
+         food_items--;
          vid_set_tile(pac_x*2 + 1, pac_y*2 + 1, BLANK_TILE);
          vid_set_tile(pac_x*2 + 2, pac_y*2 + 1, BLANK_TILE);
          vid_set_tile(pac_x*2 + 1, pac_y*2 + 2, BLANK_TILE);
          vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
          score += (n & BIG_FOOD ? BIG_FOOD_POINTS : FOOD_POINTS);
          board[pac_y][pac_x] &= ~(FOOD | BIG_FOOD);
+         if (n & BIG_FOOD) hunting = true;
       }    
-         
-      old2_x = old_x;
-      old2_y = old_y;
-      old_x = pac_x;
-      old_y = pac_y;
-     
-      ghost_up ^= 1;
+      
+      // Show the score   
+      show_score(34, 8, score);
 
-      vid_set_sprite_pos(inky, TILE_SIZE + (inky_x << 4), 
-                               TILE_SIZE + ((inky_y - ghost_up) << 4));
-      vid_set_sprite_pos(pinky, TILE_SIZE + (pinky_x << 4), 
-                                TILE_SIZE + ((pinky_y - ghost_up) << 4));
-      vid_set_sprite_pos(blinky, TILE_SIZE + (blinky_x << 4), 
-                                 TILE_SIZE + ((blinky_y - ghost_up) << 4));
-       vid_set_sprite_pos(clyde, TILE_SIZE + (clyde_x << 4), 
-                                 TILE_SIZE + ((clyde_y - ghost_up) << 4));
-    } else if ((time_waster & 0x7fff) == 0x7fff) {
-      if (show_1up) {
+      // Show number of food items
+      show_score(34, 10, food_items);
+
+      if (food_items == 0) {
+        clear_screen();
+        level++;
+      }
+      
+      // Flash 1UP
+      if ((tick_counter & 1) == 1) {
         vid_set_tile(32, 7, ZERO_TILE + 1);
         vid_set_tile(33, 7, U_TILE);
         vid_set_tile(34, 7, P_TILE);
