@@ -32,6 +32,7 @@ extern const struct song_t song_pacman;
 #define CAN_GO_DOWN 8
 #define FOOD 16
 #define BIG_FOOD 32
+#define FRUIT 64
 
 #define BLANK_TILE 0
 
@@ -59,8 +60,13 @@ extern const struct song_t song_pacman;
 #define E_TILE 38
 
 #define CHERRY_TILE 42
+
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
+#define FRUIT_POINTS 100
+
+#define FRUIT_X 7
+#define FRUIT_Y 3
 
 #define UP 2
 #define DOWN 1
@@ -123,13 +129,16 @@ void setup_board() {
 
       if (t != BLANK_TILE && t != FOOD_TILE1 && t != BIG_FOOD_TILE1) continue;
 
-      if (t == FOOD_TILE1) {
+      if (x == FRUIT_X && y == FRUIT_Y) {
+        n |= FRUIT;
+        food_items++;
+      } else if (t == FOOD_TILE1) {
         n |= FOOD;
         food_items++;
       } else if (t == BIG_FOOD_TILE1) {
         n |= BIG_FOOD;
         food_items++;
-      }
+      } 
 
       if (y > 0) {
         uint8_t above = tile_data[(((y-1)*2 + 2) << 5) + x*2 + 1];
@@ -181,6 +190,13 @@ void reset_positions() {
   num_cherries = 1;
 }
 
+void add_fruit(uint8_t x, uint8_t y) {
+  vid_set_tile(2*x + 1,2*y + 1, CHERRY_TILE);
+  vid_set_tile(2*x + 2,2*y + 1, CHERRY_TILE+1);
+  vid_set_tile(2*x + 1,2*y + 2, CHERRY_TILE+8);
+  vid_set_tile(2*x + 2,2*y + 2, CHERRY_TILE+9);
+}
+
 void setup_screen() {
   vid_init();
   vid_set_x_ofs(0);
@@ -205,6 +221,8 @@ void setup_screen() {
       vid_set_tile(x,y,tile_data[(y<<5)+x]);
     }
   }
+
+  add_fruit(FRUIT_X, FRUIT_Y);
 
   reset_positions();
 
@@ -240,7 +258,6 @@ void setup_screen() {
   vid_enable_sprite(blinky, 1);
   vid_enable_sprite(clyde, 1);
 }
-
 
 void show_cherries() {
   for(int i=0;i<num_cherries;i++) {
@@ -449,7 +466,7 @@ void main() {
       }
 
       // Set Pacman sprite position
-      vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
+      vid_set_sprite_pos(pacman, TILE_SIZE + (pac_x << 4), TILE_SIZE + (pac_y << 4));
 
       // Move inky
       if ((time_waster & 0x7FFF) == 0x7FFF) move_inky();
@@ -481,14 +498,14 @@ void main() {
 
       // Eat your food
       n = board[pac_y][pac_x];
-      if (n & FOOD || n & BIG_FOOD) {
+      if (n & FOOD || n & BIG_FOOD || n & FRUIT) {
          food_items--;
          vid_set_tile(pac_x*2 + 1, pac_y*2 + 1, BLANK_TILE);
          vid_set_tile(pac_x*2 + 2, pac_y*2 + 1, BLANK_TILE);
          vid_set_tile(pac_x*2 + 1, pac_y*2 + 2, BLANK_TILE);
          vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
-         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : FOOD_POINTS);
-         board[pac_y][pac_x] &= ~(FOOD | BIG_FOOD);
+         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? FRUIT_POINTS : FOOD_POINTS));
+         board[pac_y][pac_x] &= ~(FOOD | BIG_FOOD | FRUIT);
          if (n & BIG_FOOD) hunting = true;
       }    
       
