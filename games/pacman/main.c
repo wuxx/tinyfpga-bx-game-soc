@@ -64,6 +64,7 @@ extern const struct song_t song_pacman;
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
 #define FRUIT_POINTS 100
+#define GHOST_POINTS 200
 
 #define FRUIT_X 7
 #define FRUIT_Y 3
@@ -72,6 +73,17 @@ extern const struct song_t song_pacman;
 #define DOWN 1
 #define LEFT 3
 #define RIGHT 0
+
+#define BLACK 0
+#define RED 1
+#define GREEN 2
+#define YELLOW 3
+#define BLUE 4
+#define MAGENTA 5
+#define CYAN 6
+#define WHITE 7
+
+#define HUNT_TICKS 30
 
 const uint8_t pacman = 0;
 const uint8_t inky = 1;
@@ -91,12 +103,14 @@ bool play, chomp;
 uint8_t direction;
 uint8_t pacman_images[8];
 uint8_t ghost_images[8];
-bool hunting;
+uint8_t hunting;
+uint32_t hunt_start;
 uint32_t tick_counter;
 uint16_t food_items;
 bool game_over;
-int level;
+int stage;
 int num_cherries;
+bool inky_active, pinky_active, blnk_active, clyde_active;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -197,6 +211,13 @@ void add_fruit(uint8_t x, uint8_t y) {
   vid_set_tile(2*x + 2,2*y + 2, CHERRY_TILE+9);
 }
 
+void set_ghost_colours() {
+  vid_set_sprite_colour(inky, CYAN);
+  vid_set_sprite_colour(pinky, MAGENTA);
+  vid_set_sprite_colour(blinky, RED);
+  vid_set_sprite_colour(clyde, GREEN);
+}
+
 void setup_screen() {
   vid_init();
   vid_set_x_ofs(0);
@@ -233,18 +254,15 @@ void setup_screen() {
   for(int i=0;i<8;i++) ghost_images[i] = 8+i;
   for(int i=0; i<8; i++) vid_write_sprite_memory(ghost_images[i], ghost_sprites[i]);
   ghost_image = ghost_images[0];
+
+  set_ghost_colours();
+  vid_set_sprite_colour(pacman, YELLOW);
   
   vid_set_sprite_pos(pacman, 8 + (pac_x << 4), 8 + (pac_y << 4));
   vid_set_sprite_pos(inky, 8 + (inky_x << 4), 8 + (inky_y << 4));
   vid_set_sprite_pos(pinky, 8 + (pinky_x << 4), 8 + (pinky_y << 4));
   vid_set_sprite_pos(blinky, 8 + (blinky_x << 4), 8 + (blinky_y << 4));
   vid_set_sprite_pos(clyde, 8 + (clyde_x << 4), 8 + (clyde_y << 4));
-
-  vid_set_sprite_colour(pacman, 3);
-  vid_set_sprite_colour(inky, 6);
-  vid_set_sprite_colour(pinky, 5);
-  vid_set_sprite_colour(blinky, 2);
-  vid_set_sprite_colour(clyde, 1);
 
   vid_set_image_for_sprite(pacman, pacman_image);
   vid_set_image_for_sprite(inky, ghost_image);
@@ -314,16 +332,28 @@ void show_score(int x, int y, int score) {
 }
 
 void move_inky() {
+  if (!inky_active) return;
   uint8_t n = board[inky_y][inky_x];
 
-  if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
-  else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
-  else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
-  else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
-  else if (n & CAN_GO_LEFT) inky_x--;
-  else if (n & CAN_GO_RIGHT) inky_x++;
-  else if (n & CAN_GO_DOWN) inky_y--;
-  else if (n & CAN_GO_UP) inky_y++;
+  if (hunting == 0) {
+    if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
+    else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+    else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
+    else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
+    else if (n & CAN_GO_LEFT) inky_x--;
+    else if (n & CAN_GO_RIGHT) inky_x++;
+    else if (n & CAN_GO_DOWN) inky_y--;
+    else if (n & CAN_GO_UP) inky_y++;
+  } else {
+    if (pac_x > inky_x && (n & CAN_GO_LEFT)) inky_x--;
+    else if (pac_x < inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+    else if (pac_y > inky_y && (n & CAN_GO_UP)) inky_y--;
+    else if (pac_y < inky_y && (n & CAN_GO_DOWN)) inky_y++;
+    else if (n & CAN_GO_LEFT) inky_x--;
+    else if (n & CAN_GO_RIGHT) inky_x++;
+    else if (n & CAN_GO_DOWN) inky_y--;
+    else if (n & CAN_GO_UP) inky_y++;
+  }
 }
 
 
@@ -334,6 +364,9 @@ void move_blinky() {
 }
 
 void move_clyde() {
+}
+
+void move_eyes() {
 }
 
 void delay(uint32_t n) {
@@ -381,7 +414,11 @@ void main() {
   // Show cherries
   show_cherries();
 
+  inky_active = true;
+
   uint32_t time_waster = 0;
+
+  // Main loop
   while (1) {
     time_waster = time_waster + 1;
     if ((time_waster & 0xfff) == 0xfff) {
@@ -439,6 +476,8 @@ void main() {
         setup_screen();
         setup_board();
         score = 0;
+        inky_active = true;
+        hunting = 0;
         play = (buttons == 0);
       }
 
@@ -473,13 +512,22 @@ void main() {
 
       // Check for death
       if (pac_x == inky_x && pac_y == inky_y) {
-        clear_screen();
-        game_over;
-        pac_x = 3; pac_y = 3;
-        inky_x = 5; inky_y = 3;
-        pinky_x = 7; pinky_y = 3;
-        blinky_x = 9; blinky_y = 3;
-        clyde_x = 11; clyde_y = 3;
+        if (hunting > 0) {
+          score += GHOST_POINTS;
+          vid_enable_sprite(inky, 0);
+          inky_active = false;
+          inky_x = 7;
+          inky_y = 7;
+          move_eyes();
+        } else {
+          clear_screen();
+          game_over;
+          pac_x = 3; pac_y = 3;
+          inky_x = 5; inky_y = 3;
+          pinky_x = 7; pinky_y = 3;
+          blinky_x = 9; blinky_y = 3;
+          clyde_x = 11; clyde_y = 3;
+        }
       }
 
       // Set the approriate Pacman image
@@ -506,8 +554,30 @@ void main() {
          vid_set_tile(pac_x*2 + 2, pac_y*2 + 2, BLANK_TILE);
          score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? FRUIT_POINTS : FOOD_POINTS));
          board[pac_y][pac_x] &= ~(FOOD | BIG_FOOD | FRUIT);
-         if (n & BIG_FOOD) hunting = true;
-      }    
+         
+         if (n & BIG_FOOD) {
+           hunting = 1;
+           hunt_start = tick_counter;
+           vid_set_sprite_colour(inky, BLUE);
+           vid_set_sprite_colour(pinky, BLUE);
+           vid_set_sprite_colour(blinky, BLUE);
+           vid_set_sprite_colour(clyde, BLUE);
+         }
+      }   
+
+      if (hunting == 1 && (tick_counter - hunt_start) > HUNT_TICKS) { // Blue phase
+           vid_set_sprite_colour(inky, WHITE);
+           vid_set_sprite_colour(pinky, WHITE);
+           vid_set_sprite_colour(blinky, WHITE);
+           vid_set_sprite_colour(clyde, WHITE);
+           hunting = 2;
+           hunt_start = tick_counter;
+      } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // White phase
+           hunting = 0;
+           set_ghost_colours();
+           inky_active = true;
+           vid_enable_sprite(inky, 1);
+      } 
       
       // Show the score   
       show_score(34, 8, score);
@@ -515,9 +585,13 @@ void main() {
       // Show number of food items
       show_score(34, 10, food_items);
 
+      // Check for stage won
       if (food_items == 0) {
         clear_screen();
-        level++;
+        hunting = 0;
+        vid_enable_sprite(inky, 1);
+        set_ghost_colours();
+        stage++;
       }
       
       // Flash 1UP
