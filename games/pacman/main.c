@@ -452,6 +452,7 @@ void main() {
   vid_set_tile(39,2, E_TILE);
 
   play = false;
+  new_stage = false;
 
   // Show cherries
   show_cherries();
@@ -467,6 +468,7 @@ void main() {
   while (1) {
     time_waster = time_waster + 1;
     if ((time_waster & 0xfff) == 0xfff) {
+      // Update tick counter
       tick_counter++;
 
       // Get Nunchuk data
@@ -518,6 +520,7 @@ void main() {
 
       // Check buttons for start or restart
       if (buttons < 2) { 
+        new_stage = false;
         setup_screen();
         setup_board();
         score = 0;
@@ -527,7 +530,7 @@ void main() {
         play = (buttons == 0);
       }
 
-      // Save last position and one before last
+      // Save last Pacman position and one before last
       old2_x = old_x;
       old2_y = old_y;
       old_x = pac_x;
@@ -536,18 +539,18 @@ void main() {
       /* Update Pacman location. If playing, pacman is moved by joystick, otherwise moves himself.
          Direction of moves is determined and chomp alternates as pacman moves. */
       int n = board[pac_y][pac_x];
-
-      if (play) {
-         if (pac_x< 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) {chomp = !chomp; pac_x++; direction=RIGHT;}
+      if (play) { // Playing a game
+         if (pac_x < 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) {chomp = !chomp; pac_x++; direction=RIGHT;}
 
          else if (pac_x > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) {chomp = !chomp; pac_x--; direction=LEFT;}
          else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) {chomp = !chomp; pac_y++; direction=DOWN;}
          else if (pac_y > 0 && jy > 0xc0 && (n & CAN_GO_UP)) {chomp = !chomp; pac_y--; direction=UP;}
-       } else {
-        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) {chomp = !chomp;pac_y--; direction=UP;}
-        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) {chomp = !chomp;pac_x++; direction=RIGHT;}
-        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) {chomp = !chomp;pac_y++; direction=DOWN;}
-        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) {chomp = ! chomp;pac_x--; direction=LEFT;}
+       } else { // Game animation
+        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) {pac_y--; direction=UP;}
+        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) {pac_x++; direction=RIGHT;}
+        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) {pac_y++; direction=DOWN;}
+        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) {pac_x--; direction=LEFT;}
+        chomp = !chomp;
       }
 
       // Set Pacman sprite position
@@ -560,11 +563,8 @@ void main() {
       if (pac_x == inky_x && pac_y == inky_y) {
         if (hunting > 0) {
           score += GHOST_POINTS;
-          vid_enable_sprite(inky, 0);
-          inky_active = false;
-          inky_x = 7;
-          inky_y = 7;
-          move_eyes();
+          vid_set_image_for_sprite(inky, ghost_images[1]);
+          vid_set_sprite_colour(inky, WHITE);
         } else {
           clear_screen();
           game_over = true;
@@ -611,21 +611,25 @@ void main() {
            vid_set_sprite_colour(blinky, BLUE);
            vid_set_sprite_colour(clyde, BLUE);
          }
-      }   
+      }
+ 
+      // Check for end of hunting
+      if (hunting == 1 && (tick_counter - hunt_start) > HUNT_TICKS) { // End of blue phase
+         vid_set_sprite_colour(inky, WHITE);
+         vid_set_sprite_colour(pinky, WHITE);
+         vid_set_sprite_colour(blinky, WHITE);
+         vid_set_sprite_colour(clyde, WHITE);
+         hunting = 2;
+         hunt_start = tick_counter;
+      } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // End of white phase
+         hunting = 0;
+         set_ghost_colours();
+         vid_enable_sprite(inky, 1);         
+         vid_set_image_for_sprite(inky, ghost_images[0]);
+      }
 
-      if (hunting == 1 && (tick_counter - hunt_start) > HUNT_TICKS) { // Blue phase
-           vid_set_sprite_colour(inky, WHITE);
-           vid_set_sprite_colour(pinky, WHITE);
-           vid_set_sprite_colour(blinky, WHITE);
-           vid_set_sprite_colour(clyde, WHITE);
-           hunting = 2;
-           hunt_start = tick_counter;
-      } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // White phase
-           hunting = 0;
-           set_ghost_colours();
-           inky_active = true;
-           vid_enable_sprite(inky, 1);
-      } 
+      // Flash ghosts when hunting
+      if (hunting == 2) vid_enable_sprite(inky, tick_counter & 1); 
       
       // Show the score   
       show_score(34, 8, score);
@@ -650,7 +654,7 @@ void main() {
 
       // Flash board for new stage
       if (new_stage) {
-        if (tick_counter & 2 == 0) clear_screen();
+        if (tick_counter & 2) clear_screen();
         else show_board();
       }
       
@@ -661,9 +665,7 @@ void main() {
         vid_set_tile(34, 7, P_TILE);
 
       } else {
-        vid_set_tile(32, 7, BLANK_TILE);
-        vid_set_tile(33, 7, BLANK_TILE);
-        vid_set_tile(34, 7, BLANK_TILE);
+        for(int i=0;i<3;i++) vid_set_tile(32+i, 7, BLANK_TILE);
       }
     }
   }
