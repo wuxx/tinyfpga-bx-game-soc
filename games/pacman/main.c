@@ -60,6 +60,7 @@ extern const struct song_t song_pacman;
 #define E_TILE 38
 
 #define CHERRY_TILE 42
+#define PACMAN_TILE 46
 
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
@@ -107,9 +108,9 @@ uint8_t hunting;
 uint32_t hunt_start;
 uint32_t tick_counter;
 uint16_t food_items;
-bool game_over;
-int stage;
-int num_cherries;
+bool game_over, new_stage;
+uint8_t stage;
+uint8_t num_cherries, num_lives;
 bool inky_active, pinky_active, blnk_active, clyde_active;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
@@ -179,6 +180,15 @@ void setup_board() {
   }      
 }
 
+void show_board() {
+  for (int x = 0; x < 32; x++) {
+    for (int y = 0; y < 32; y++) {
+     uint8_t t = tile_data[(y<<5)+x];
+     if (t < 16 && t != 4 && t != 5 && t != 12 && t != 13) vid_set_tile(x,y,t);
+    }
+  }
+}
+
 void print_board() {
   print("Board:\n");
   for(int y = 0; y < 14; y++) {
@@ -191,8 +201,9 @@ void print_board() {
 }  
 
 void reset_positions() {
-  pac_x = 0;
-  pac_y = 13;
+  pac_x = 7;
+  pac_y = 11;
+  direction = RIGHT;
   inky_x = 7;
   inky_y = 7;
   pinky_x = 6;
@@ -202,6 +213,8 @@ void reset_positions() {
   clyde_x = 8;
   clyde_y = 10;
   num_cherries = 1;
+  num_lives = 3;
+  chomp = true;
 }
 
 void add_fruit(uint8_t x, uint8_t y) {
@@ -279,10 +292,19 @@ void setup_screen() {
 
 void show_cherries() {
   for(int i=0;i<num_cherries;i++) {
-    vid_set_tile(32,15, CHERRY_TILE);
-    vid_set_tile(33,15, CHERRY_TILE+1);
-    vid_set_tile(32,16, CHERRY_TILE+8);
-    vid_set_tile(33,16, CHERRY_TILE+9);
+    vid_set_tile(32 + i*2, 16, CHERRY_TILE);
+    vid_set_tile(33 + i*2, 16, CHERRY_TILE+1);
+    vid_set_tile(32 + i*2, 17, CHERRY_TILE+8);
+    vid_set_tile(33 + i*2, 17, CHERRY_TILE+9);
+  }
+}
+
+void show_lives() {
+  for(int i=0;i<num_lives;i++) {
+    vid_set_tile(32 + i*2, 22, PACMAN_TILE);
+    vid_set_tile(33 + i*2, 22, PACMAN_TILE+1);
+    vid_set_tile(32 + i*2, 23, PACMAN_TILE+8);
+    vid_set_tile(33 + i*2, 23, PACMAN_TILE+9);
   }
 }
 
@@ -358,6 +380,28 @@ void move_inky() {
 
 
 void move_pinky() {
+  if (!pinky_active) return;
+  uint8_t n = board[inky_y][inky_x];
+
+  if (hunting == 0) {
+    if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
+    else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+    else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
+    else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
+    else if (n & CAN_GO_LEFT) inky_x--;
+    else if (n & CAN_GO_RIGHT) inky_x++;
+    else if (n & CAN_GO_DOWN) inky_y--;
+    else if (n & CAN_GO_UP) inky_y++;
+  } else {
+    if (pac_x > inky_x && (n & CAN_GO_LEFT)) inky_x--;
+    else if (pac_x < inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+    else if (pac_y > inky_y && (n & CAN_GO_UP)) inky_y--;
+    else if (pac_y < inky_y && (n & CAN_GO_DOWN)) inky_y++;
+    else if (n & CAN_GO_LEFT) inky_x--;
+    else if (n & CAN_GO_RIGHT) inky_x++;
+    else if (n & CAN_GO_DOWN) inky_y--;
+    else if (n & CAN_GO_UP) inky_y++;
+  }
 }
 
 void move_blinky() {
@@ -407,12 +451,13 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
-  show_score(34, 4, hi_score);
-
   play = false;
 
   // Show cherries
   show_cherries();
+
+  // Show lives
+  show_lives();
 
   inky_active = true;
 
@@ -478,6 +523,7 @@ void main() {
         score = 0;
         inky_active = true;
         hunting = 0;
+        show_score(34, 12, stage);
         play = (buttons == 0);
       }
 
@@ -521,12 +567,14 @@ void main() {
           move_eyes();
         } else {
           clear_screen();
-          game_over;
+          game_over = true;
           pac_x = 3; pac_y = 3;
           inky_x = 5; inky_y = 3;
           pinky_x = 7; pinky_y = 3;
           blinky_x = 9; blinky_y = 3;
           clyde_x = 11; clyde_y = 3;
+          play = false;
+          stage = 0;
         }
       }
 
@@ -581,6 +629,10 @@ void main() {
       
       // Show the score   
       show_score(34, 8, score);
+      
+      // Show hi-score
+      if (score > hi_score) hi_score = score;
+      show_score(34, 4, hi_score);
 
       // Show number of food items
       show_score(34, 10, food_items);
@@ -591,7 +643,15 @@ void main() {
         hunting = 0;
         vid_enable_sprite(inky, 1);
         set_ghost_colours();
-        stage++;
+        new_stage = true;
+        if (play) stage++;
+        play = false;
+      }
+
+      // Flash board for new stage
+      if (new_stage) {
+        if (tick_counter & 2 == 0) clear_screen();
+        else show_board();
       }
       
       // Flash 1UP
