@@ -20,7 +20,6 @@ extern uint32_t sram;
 
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
-#define reg_leds  (*(volatile uint32_t*)0x03000000)
 
 extern const struct song_t song_pacman;
 
@@ -86,15 +85,18 @@ extern const struct song_t song_pacman;
 
 #define HUNT_TICKS 30
 
+#define BOARD_WIDTH 15
+#define BOARD_HEIGHT 14
+
 const uint8_t pacman = 0;
 const uint8_t inky = 1;
 const uint8_t pinky = 2;
 const uint8_t blinky = 3;
 const uint8_t clyde = 4;
 
-uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
-uint32_t led_state = 0x00000000;
+const uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
 
+// Working data
 uint8_t board[14][15];
 uint8_t pacman_image, pac_x, pac_y, ghost_image;
 uint8_t inky_x, blinky_x, pinky_x, clyde_x;
@@ -112,6 +114,9 @@ bool game_over, new_stage;
 uint8_t stage;
 uint8_t num_cherries, num_lives;
 bool inky_active, pinky_active, blnk_active, clyde_active;
+uint8_t old_pac_x, old_pac_y, old2_pac_x, old2_pac_y;
+uint8_t old_inky_x, old_inky_y, old2_inky_x, old2_inky_y;
+bool inky_eyes;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -127,6 +132,7 @@ uint32_t set_timer_counter(uint32_t val); asm (
     "ret\n"
 );
 
+// Set all tiles on board section of screen to blank
 void clear_screen() {
  for (int x = 0; x < 32; x++) {
     for (int y = 0; y < 32; y++) {
@@ -135,6 +141,7 @@ void clear_screen() {
   } 
 }
 
+// Set up the board grid with cell properties
 void setup_board() {
   food_items = 0;
   for(int y = 0; y < 14; y++) {
@@ -180,6 +187,7 @@ void setup_board() {
   }      
 }
 
+// Display just the board, not its contents
 void show_board() {
   for (int x = 0; x < 32; x++) {
     for (int y = 0; y < 32; y++) {
@@ -189,6 +197,7 @@ void show_board() {
   }
 }
 
+// Diagnostic print of board
 void print_board() {
   print("Board:\n");
   for(int y = 0; y < 14; y++) {
@@ -200,6 +209,7 @@ void print_board() {
   }
 }  
 
+// Reset sprites to their original positions
 void reset_positions() {
   pac_x = 7;
   pac_y = 11;
@@ -215,8 +225,10 @@ void reset_positions() {
   num_cherries = 1;
   num_lives = 3;
   chomp = true;
+  inky_eyes = false;
 }
 
+// Add fruit to the board
 void add_fruit(uint8_t x, uint8_t y) {
   vid_set_tile(2*x + 1,2*y + 1, CHERRY_TILE);
   vid_set_tile(2*x + 2,2*y + 1, CHERRY_TILE+1);
@@ -224,6 +236,7 @@ void add_fruit(uint8_t x, uint8_t y) {
   vid_set_tile(2*x + 2,2*y + 2, CHERRY_TILE+9);
 }
 
+// Set ghosts to their initial colours
 void set_ghost_colours() {
   vid_set_sprite_colour(inky, CYAN);
   vid_set_sprite_colour(pinky, MAGENTA);
@@ -231,6 +244,7 @@ void set_ghost_colours() {
   vid_set_sprite_colour(clyde, GREEN);
 }
 
+// Set up all the graphics data for board portion iof screen
 void setup_screen() {
   vid_init();
   vid_set_x_ofs(0);
@@ -290,6 +304,7 @@ void setup_screen() {
   vid_enable_sprite(clyde, 1);
 }
 
+// Display available fruit
 void show_cherries() {
   for(int i=0;i<num_cherries;i++) {
     vid_set_tile(32 + i*2, 16, CHERRY_TILE);
@@ -299,6 +314,7 @@ void show_cherries() {
   }
 }
 
+// Display available lives
 void show_lives() {
   for(int i=0;i<num_lives;i++) {
     vid_set_tile(32 + i*2, 22, PACMAN_TILE);
@@ -308,35 +324,24 @@ void show_lives() {
   }
 }
 
+// Interrupt handling used for playing audio
 void irq_handler(uint32_t irqs, uint32_t* regs)
 {
-  /* fast IRQ (4) */
-  if ((irqs & (1<<4)) != 0) {
-    // print_str("[EXT-IRQ-4]");
-  }
-
-  /* slow IRQ (5) */
-  if ((irqs & (1<<5)) != 0) {
-    // print_str("[EXT-IRQ-5]");
-  }
-
   /* timer IRQ */
   if ((irqs & 1) != 0) {
     // retrigger timer
     set_timer_counter(counter_frequency);
 
-    led_state = led_state ^ 0x01;
-    reg_leds = led_state;
     songplayer_tick();
   }
 }
 
 const int divisor[] = {10000,1000,100,10};
 
+// Display score, h-score or another numnber
 void show_score(int x, int y, int score) {
   int s = score;
   bool blank = true;
-
   for(int i=0; i<5; i++) {
     int d = 0;
     if (i == 4) d = s;
@@ -353,24 +358,32 @@ void show_score(int x, int y, int score) {
   }
 }
 
+// Inky behaviour
 void move_inky() {
   if (!inky_active) return;
   uint8_t n = board[inky_y][inky_x];
 
-  if (hunting == 0) {
-    if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
-    else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
-    else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
-    else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
+  uint8_t target_x = pac_x, target_y = pac_y;
+
+  if (inky_eyes) {
+    target_x = 7;
+    target_y == 7;
+  }
+
+  if (hunting == 0i || inky_eyes) {
+    if (target_x < inky_x && (n & CAN_GO_LEFT) && inky_x-1 != old2_inky_x) inky_x--;
+    else if (target_x > inky_x && (n & CAN_GO_RIGHT) && inky_x+1 != old2_inky_x) inky_x++;
+    else if (target_y < inky_y && (n & CAN_GO_UP) && inky_y+1 != old2_inky_y) inky_y--;
+    else if (target_y > inky_y && (n & CAN_GO_DOWN) && inky_y+1 != old2_inky_y) inky_y++;
     else if (n & CAN_GO_LEFT) inky_x--;
     else if (n & CAN_GO_RIGHT) inky_x++;
     else if (n & CAN_GO_DOWN) inky_y--;
     else if (n & CAN_GO_UP) inky_y++;
   } else {
-    if (pac_x > inky_x && (n & CAN_GO_LEFT)) inky_x--;
-    else if (pac_x < inky_x && (n & CAN_GO_RIGHT)) inky_x++;
-    else if (pac_y > inky_y && (n & CAN_GO_UP)) inky_y--;
-    else if (pac_y < inky_y && (n & CAN_GO_DOWN)) inky_y++;
+    if (target_x > inky_x && (n & CAN_GO_LEFT)) inky_x--;
+    else if (target_x < inky_x && (n & CAN_GO_RIGHT)) inky_x++;
+    else if (target_y > inky_y && (n & CAN_GO_UP)) inky_y--;
+    else if (target_y < inky_y && (n & CAN_GO_DOWN)) inky_y++;
     else if (n & CAN_GO_LEFT) inky_x--;
     else if (n & CAN_GO_RIGHT) inky_x++;
     else if (n & CAN_GO_DOWN) inky_y--;
@@ -378,54 +391,38 @@ void move_inky() {
   }
 }
 
-
+// Pinky behaviour
 void move_pinky() {
   if (!pinky_active) return;
   uint8_t n = board[inky_y][inky_x];
-
-  if (hunting == 0) {
-    if (pac_x < inky_x && (n & CAN_GO_LEFT)) inky_x--;
-    else if (pac_x > inky_x && (n & CAN_GO_RIGHT)) inky_x++;
-    else if (pac_y < inky_y && (n & CAN_GO_UP)) inky_y--;
-    else if (pac_y > inky_y && (n & CAN_GO_DOWN)) inky_y++;
-    else if (n & CAN_GO_LEFT) inky_x--;
-    else if (n & CAN_GO_RIGHT) inky_x++;
-    else if (n & CAN_GO_DOWN) inky_y--;
-    else if (n & CAN_GO_UP) inky_y++;
-  } else {
-    if (pac_x > inky_x && (n & CAN_GO_LEFT)) inky_x--;
-    else if (pac_x < inky_x && (n & CAN_GO_RIGHT)) inky_x++;
-    else if (pac_y > inky_y && (n & CAN_GO_UP)) inky_y--;
-    else if (pac_y < inky_y && (n & CAN_GO_DOWN)) inky_y++;
-    else if (n & CAN_GO_LEFT) inky_x--;
-    else if (n & CAN_GO_RIGHT) inky_x++;
-    else if (n & CAN_GO_DOWN) inky_y--;
-    else if (n & CAN_GO_UP) inky_y++;
-  }
 }
 
+// Blinky behaviour
 void move_blinky() {
 }
 
+// Clyde behaviour
 void move_clyde() {
 }
 
-void move_eyes() {
-}
-
+// delay a few clock cycles - used by Nunchuk code
 void delay(uint32_t n) {
   for (uint32_t i = 0; i < n; i++) asm volatile ("");
 }
 
+// Main entry point
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
   set_irq_mask(0x00);
 
+  // Set up the screen
   setup_screen();
     
+  // Set up the board
   setup_board();
   print_board();
 
+  // Play music
   songplayer_init(&song_pacman);
 
   // switch to dual IO mode
@@ -438,11 +435,14 @@ void main() {
   // Initialize the Nunchuk
   i2c_send_cmd(0x40, 0x00);
 
-  int old_x = 255, old_y = 255, old2_x = 255, old2_y = 255;
-  score = 0;
+  play = false;
+  new_stage = false;
+  inky_eyes = false;
+
+  // Default high score
   hi_score = 10000;
 
-  // Score HI-SCORE
+  // Display score and HI-SCORE
   vid_set_tile(32,2, H_TILE);
   vid_set_tile(33,2, I_TILE);
   vid_set_tile(35,2, S_TILE);
@@ -451,15 +451,13 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
-  play = false;
-  new_stage = false;
-
   // Show cherries
   show_cherries();
 
   // Show lives
   show_lives();
 
+  // Start inky immediately
   inky_active = true;
 
   uint32_t time_waster = 0;
@@ -523,7 +521,7 @@ void main() {
         new_stage = false;
         setup_screen();
         setup_board();
-        score = 0;
+        if (stage == 0) score = 0;
         inky_active = true;
         hunting = 0;
         show_score(34, 12, stage);
@@ -531,10 +529,10 @@ void main() {
       }
 
       // Save last Pacman position and one before last
-      old2_x = old_x;
-      old2_y = old_y;
-      old_x = pac_x;
-      old_y = pac_y;
+      old2_pac_x = old_pac_x;
+      old2_pac_y = old_pac_y;
+      old_pac_x = pac_x;
+      old_pac_y = pac_y;
 
       /* Update Pacman location. If playing, pacman is moved by joystick, otherwise moves himself.
          Direction of moves is determined and chomp alternates as pacman moves. */
@@ -546,10 +544,10 @@ void main() {
          else if (pac_y < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) {chomp = !chomp; pac_y++; direction=DOWN;}
          else if (pac_y > 0 && jy > 0xc0 && (n & CAN_GO_UP)) {chomp = !chomp; pac_y--; direction=UP;}
        } else { // Game animation
-        if ((n & CAN_GO_UP) && (pac_y-1 != old2_y)) {pac_y--; direction=UP;}
-        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_x)) {pac_x++; direction=RIGHT;}
-        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_y)) {pac_y++; direction=DOWN;}
-        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_x)) {pac_x--; direction=LEFT;}
+        if ((n & CAN_GO_UP) && (pac_y-1 != old2_pac_y)) {pac_y--; direction=UP;}
+        else if ((n & CAN_GO_RIGHT) && (pac_x+1 != old2_pac_x)) {pac_x++; direction=RIGHT;}
+        else if ((n & CAN_GO_DOWN) && (pac_y+1 != old2_pac_y)) {pac_y++; direction=DOWN;}
+        else if ((n & CAN_GO_LEFT) && (pac_x-1 == old2_pac_x)) {pac_x--; direction=LEFT;}
         chomp = !chomp;
       }
 
@@ -557,7 +555,15 @@ void main() {
       vid_set_sprite_pos(pacman, TILE_SIZE + (pac_x << 4), TILE_SIZE + (pac_y << 4));
 
       // Move inky
-      if ((time_waster & 0x7FFF) == 0x7FFF) move_inky();
+      if ((time_waster & 0x7FFF) == 0x7FFF) {
+        // Save last Pacman position and one before last
+        old2_inky_x = old_inky_x;
+        old2_inky_y = old_inky_y;
+        old_inky_x = inky_x;
+        old_inky_y = inky_y;
+
+        move_inky();
+      }
 
       // Check for death
       if (pac_x == inky_x && pac_y == inky_y) {
@@ -565,6 +571,7 @@ void main() {
           score += GHOST_POINTS;
           vid_set_image_for_sprite(inky, ghost_images[1]);
           vid_set_sprite_colour(inky, WHITE);
+          inky_eyes = true;
         } else {
           clear_screen();
           game_over = true;
@@ -626,6 +633,7 @@ void main() {
          set_ghost_colours();
          vid_enable_sprite(inky, 1);         
          vid_set_image_for_sprite(inky, ghost_images[0]);
+         inky_eyes = false;
       }
 
       // Flash ghosts when hunting
