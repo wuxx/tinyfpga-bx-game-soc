@@ -62,6 +62,9 @@ extern const struct song_t song_pacman;
 #define O_TILE 60
 #define R_TILE 61
 #define E_TILE 62
+#define A_TILE 63
+#define D_TILE 32
+#define Y_TILE 33
 
 #define CHERRY_TILE 42
 #define STRAWBERRY_TILE 44
@@ -284,8 +287,6 @@ void reset_positions() {
 
   sprite_x[clyde] = 8;
   sprite_y[clyde] = 10;
-  
-  for(int i=0;i<NUM_GHOSTS;i++) ghost_eyes[i] = false;
 
   num_fruit = 2;
   num_lives = 3;
@@ -383,6 +384,10 @@ void setup_screen() {
 
   // Enable all the sprites
   for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 1);
+ 
+  // Disable ghost eyes and set ghosts inactive 
+  for(int i=0;i<NUM_GHOSTS;i++) ghost_eyes[i] = false;
+  for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
 }
 
 // Display available fruit
@@ -428,6 +433,15 @@ void show_score(int x, int y, int score) {
     int tile = blank && i != 4 ? BLANK_TILE : ZERO_TILE + d;
     vid_set_tile(x+i, y, tile);
   }
+}
+
+// Show ready message
+void show_ready() {
+  vid_set_tile(13,8, R_TILE);
+  vid_set_tile(14,8, E_TILE);
+  vid_set_tile(15,8, A_TILE);
+  vid_set_tile(16,8, D_TILE);
+  vid_set_tile(17,8, Y_TILE);
 }
 
 // Chase a sprite or go to a target
@@ -616,6 +630,9 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
+  // Display the ready message
+  show_ready();
+
   // Start Blinky immediately
   ghost_active[blinky-1] = true;
 
@@ -693,7 +710,7 @@ void main() {
       old_score = score;
 
       if ((tick_counter - game_start) == FRUIT_TICKS) 
-        add_fruit(FRUIT_X, FRUIT_Y, CHERRY_TILE);
+        add_fruit(FRUIT_X, FRUIT_Y, (stage == 0 ? CHERRY_TILE : STRAWBERRY_TILE));
 
       // Save last Pacman position and one before last
       old2_sprite_x[pacman] = old_sprite_x[pacman];
@@ -830,7 +847,7 @@ void main() {
          vid_set_tile(sprite_x[pacman]*2 + 1, sprite_y[pacman]*2 + 2, BLANK_TILE);
          vid_set_tile(sprite_x[pacman]*2 + 2, sprite_y[pacman]*2 + 2, BLANK_TILE);
 
-         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? CHERRY_POINTS : FOOD_POINTS));
+         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? (stage == 0 ? CHERRY_POINTS : STRAWBERRY_POINTS) : FOOD_POINTS));
          board[sprite_y[pacman]][sprite_x[pacman]] &= ~(FOOD | BIG_FOOD | FRUIT);
          
          if (n & BIG_FOOD && !hunting) {
