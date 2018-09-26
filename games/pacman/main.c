@@ -69,7 +69,8 @@ extern const struct song_t song_pacman;
 // Point values
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
-#define FRUIT_POINTS 100
+#define CHERRIES_POINTS 100
+#define STRAWBEERIES_POINTS 500
 #define GHOST_POINTS 200
 
 // Board positions
@@ -92,18 +93,33 @@ extern const struct song_t song_pacman;
 #define CYAN 6
 #define WHITE 7
 
+// Sprite images
+
+#define GHOST_IMAGE 0
+#define EYES_IMAGE 1
+#define SCORE_IMAGE 2
+
 // Period lengths
 #define HUNT_TICKS 30
 #define STAGE_OVER_TICKS 10
+#define FRUIT_TICKS 100
 
 #define PINKY_START 20
 #define INKY_START 40
 #define CLYDE_START 60
 
 // Sprite numbers
-
 #define NUM_SPRITES 5
 #define NUM_GHOSTS 4
+
+// Point thresholds
+#define LIFE_POINTS 10000
+
+// Ghost states
+#define DOCKED 0
+#define ACTIVE 1
+#define SCORE 2
+#define EYES 3
 
 const uint8_t pacman = 0;
 const uint8_t blinky = 1;
@@ -127,8 +143,8 @@ uint8_t old2_sprite_x[NUM_SPRITES], old2_sprite_y[NUM_SPRITES];
 bool ghost_eyes[NUM_GHOSTS];
 bool ghost_active[NUM_GHOSTS];
 uint8_t pacman_image, ghost_image;
-uint16_t score, hi_score, food_items;
-uint8_t stage, direction, hunting, num_cherries, num_lives;
+uint16_t score, hi_score, old_score, food_items, ghost_points;
+uint8_t stage, direction, hunting, num_fruit, num_lives, kills;
 uint32_t tick_counter, game_start, hunt_start, stage_over_start;
 bool play, chomp, game_over, new_stage;
 
@@ -262,16 +278,18 @@ void reset_positions() {
   
   for(int i=0;i<NUM_GHOSTS;i++) ghost_eyes[i] = false;
 
-  num_cherries = 1;
+  num_fruit = 1;
   num_lives = 3;
   
   hunting = 0;
+  kills = 0;
   chomp = true;
   new_stage = false;
 }
 
 // Add fruit to the board
 void add_fruit(uint8_t x, uint8_t y) {
+  board[y][x] |= FRUIT;
   vid_set_tile(2*x + 1,2*y + 1, CHERRY_TILE);
   vid_set_tile(2*x + 2,2*y + 1, CHERRY_TILE+1);
   vid_set_tile(2*x + 1,2*y + 2, CHERRY_TILE+8);
@@ -286,12 +304,31 @@ void set_ghost_colours() {
   vid_set_sprite_colour(clyde, GREEN);
 }
 
+void set_board_colour(uint8_t color) {
+  // Set up the 64 8x8 textures
+  for (int tex = 0; tex < 64; tex++) {
+    for (int x = 0; x < 8; x++) {
+      for (int y = 0 ; y < 8; y++) {
+        int texrow = tex >> 3;   // 0-7, row in texture map
+        int texcol = tex & 0x07; // 0-7, column in texture map
+        int pixx = (texcol<<3)+x;
+        int pixy = (texrow<<3)+y;
+        uint32_t pixel = texture_data[(pixy<<6)+pixx];
+        if (pixel != 0 && tex < 16 && tex != 0 && tex != 4 && tex != 5 && tex != 12 && tex != 13) pixel = color;
+        vid_set_texture_pixel(tex, x, y, pixel);
+      }
+    }
+  }
+}
+
 // Set up all the graphics data for board portion of screen
 void setup_screen() {
+  // Initialse the video and set offset to (0,0)
   vid_init();
   vid_set_x_ofs(0);
   vid_set_y_ofs(0);
 
+  // Set up the 64 8x8 textures
   for (int tex = 0; tex < 64; tex++) {
     for (int x = 0; x < 8; x++) {
       for (int y = 0 ; y < 8; y++) {
@@ -305,40 +342,43 @@ void setup_screen() {
     }
   }
 
+  // Set up the 32x32 tiles
   for (int x = 0; x < 32; x++) {
     for (int y = 0; y < 32; y++) {
       vid_set_tile(x,y,tile_data[(y<<5)+x]);
     }
   }
 
-  add_fruit(FRUIT_X, FRUIT_Y);
-
+  // Reset the sprite positions
   reset_positions();
 
+  // Set up the Pacman sprite images as images 0-7 and set the image to the first one
   for(int i=0;i<8;i++) pacman_images[i] = i;
   for(int i=0; i<8; i++) vid_write_sprite_memory(pacman_images[i], pacman_sprites[i]);
   pacman_image = pacman_images[0];
+  vid_set_image_for_sprite(pacman, pacman_image);
 
+  // Set up the ghost sprite images as image 8-15 and set the current ghost image to the first one
   for(int i=0;i<8;i++) ghost_images[i] = 8+i;
   for(int i=0; i<8; i++) vid_write_sprite_memory(ghost_images[i], ghost_sprites[i]);
-  ghost_image = ghost_images[0];
+  ghost_image = ghost_images[GHOST_IMAGE];
+  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, ghost_image);
 
+  // Set the sprite colours, to their defaults
   set_ghost_colours();
   vid_set_sprite_colour(pacman, YELLOW);
  
+  // Position the sprites to their home positions
   for(int i=0;i<NUM_SPRITES;i++)
     vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 8 + (sprite_y[i] << 4));
 
-  vid_set_image_for_sprite(pacman, pacman_image);
-
-  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, ghost_image);
-
+  // Enable all the sprites
   for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 1);
 }
 
 // Display available fruit
-void show_cherries() {
-  for(int i=0;i<num_cherries;i++) {
+void show_fruit() {
+  for(int i=0;i<num_fruit;i++) {
     vid_set_tile(32 + i*2, 16, CHERRY_TILE);
     vid_set_tile(33 + i*2, 16, CHERRY_TILE+1);
     vid_set_tile(32 + i*2, 17, CHERRY_TILE+8);
@@ -348,11 +388,11 @@ void show_cherries() {
 
 // Display available lives
 void show_lives() {
-  for(int i=0;i<num_lives;i++) {
-    vid_set_tile(32 + i*2, 22, PACMAN_TILE);
-    vid_set_tile(33 + i*2, 22, PACMAN_TILE+1);
-    vid_set_tile(32 + i*2, 23, PACMAN_TILE+8);
-    vid_set_tile(33 + i*2, 23, PACMAN_TILE+9);
+  for(int i=0;i<4;i++) {
+    vid_set_tile(32 + i*2, 22, (i < num_lives ? PACMAN_TILE : BLANK_TILE));
+    vid_set_tile(33 + i*2, 22, (i < num_lives ? PACMAN_TILE+1 : BLANK_TILE));
+    vid_set_tile(32 + i*2, 23, (i < num_lives ? PACMAN_TILE+8 : BLANK_TILE));
+    vid_set_tile(33 + i*2, 23, (i < num_lives ? PACMAN_TILE+9 : BLANK_TILE));
   }
 }
 
@@ -564,12 +604,6 @@ void main() {
   vid_set_tile(38,2, R_TILE);
   vid_set_tile(39,2, E_TILE);
 
-  // Show cherries
-  show_cherries();
-
-  // Show lives
-  show_lives();
-
   // Start Blinky immediately
   ghost_active[blinky-1] = true;
 
@@ -643,6 +677,11 @@ void main() {
         show_score(34, 12, stage);
       }
 
+      // Save score
+      old_score = score;
+
+      if ((tick_counter - game_start) == FRUIT_TICKS) add_fruit(FRUIT_X, FRUIT_Y);
+
       // Save last Pacman position and one before last
       old2_sprite_x[pacman] = old_sprite_x[pacman];
       old2_sprite_y[pacman] = old_sprite_y[pacman];
@@ -710,6 +749,12 @@ void main() {
         sprite_y[inky] = 7;
       }
 
+      // Show fruit
+      show_fruit();
+
+      // Show lives
+      show_lives();
+
       // Move ghosts
       for(int i=0; i<NUM_GHOSTS;i++) {
         if (ghost_eyes[i] || (tick_counter & 0xF) == 0xF) {
@@ -729,12 +774,14 @@ void main() {
       for(int i= 0;i<NUM_GHOSTS;i++) {
         if ((sprite_x[pacman] == sprite_x[i+1] && sprite_y[pacman] == sprite_y[i+1]) && !ghost_eyes[i]) {
           if (hunting > 0) {
-            score += GHOST_POINTS;
-            vid_set_image_for_sprite(i+1, ghost_images[1]);
+            score += ghost_points;
+            vid_set_image_for_sprite(i+1, ghost_images[SCORE_IMAGE+kills++]);
             vid_set_sprite_colour(i+1, WHITE);
             ghost_eyes[i] = true;
-          } else {
+            ghost_points <= 1;
+          } else if (num_lives == 1) {
             clear_screen();
+            num_lives = 0;
           
             game_over = true;
             play = false;
@@ -746,7 +793,7 @@ void main() {
             sprite_x[pinky] = 7; sprite_y[pinky] = 3;
             sprite_x[inky] = 9; sprite_y[inky] = 3;
             sprite_x[clyde] = 11; sprite_y[clyde] = 3;
-          }
+          } else if (num_lives > 0) num_lives--;
         }
       }
 
@@ -770,12 +817,14 @@ void main() {
          vid_set_tile(sprite_x[pacman]*2 + 1, sprite_y[pacman]*2 + 2, BLANK_TILE);
          vid_set_tile(sprite_x[pacman]*2 + 2, sprite_y[pacman]*2 + 2, BLANK_TILE);
 
-         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? FRUIT_POINTS : FOOD_POINTS));
+         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? CHERRIES_POINTS : FOOD_POINTS));
          board[sprite_y[pacman]][sprite_x[pacman]] &= ~(FOOD | BIG_FOOD | FRUIT);
          
          if (n & BIG_FOOD && !hunting) {
            hunting = 1;
+           kills = 0;
            hunt_start = tick_counter;
+           ghost_points = GHOST_POINTS;
            for(int i=0;i<NUM_GHOSTS;i++) vid_set_sprite_colour(i+1, BLUE);
          }
       }
@@ -787,6 +836,7 @@ void main() {
         hunt_start = tick_counter;
       } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // End of white phase
         hunting = 0;
+        kills = 0;
         set_ghost_colours();
         for(int i=0;i<NUM_GHOSTS;i++) {
           vid_enable_sprite(i+1, 1);         
@@ -799,7 +849,10 @@ void main() {
 
       // Flash ghosts when hunting
       if (hunting == 2) for(int i=0;i<NUM_GHOSTS;i++) vid_enable_sprite(i+1, tick_counter & 1); 
-      
+     
+      // Extra live after 10000 points
+      if (score >= LIFE_POINTS && old_score < LIFE_POINTS) num_lives++;
+ 
       // Show the score   
       show_score(34, 8, score);
       
@@ -824,11 +877,13 @@ void main() {
 
       // Flash board for new stage
       if (new_stage) {
+        show_board();
         if ((tick_counter - stage_over_start) < STAGE_OVER_TICKS) { 
-          if (tick_counter & 2) clear_screen();
-          else show_board();
+          if (tick_counter & 1) set_board_colour(WHITE);
+          else set_board_colour(BLUE);
         } else {
           new_stage = false;
+          set_board_colour(BLUE);
           clear_screen();
         }
       }
