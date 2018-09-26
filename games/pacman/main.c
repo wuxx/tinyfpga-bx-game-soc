@@ -94,15 +94,17 @@ extern const struct song_t song_pacman;
 #define HUNT_TICKS 30
 #define STAGE_OVER_TICKS 10
 
+#define PINKY_START 20
+
 // Sprite numbers
 
 #define NUM_SPRITES 5
 #define NUM_GHOSTS 4
 
 const uint8_t pacman = 0;
-const uint8_t inky = 1;
+const uint8_t blinky = 1;
 const uint8_t pinky = 2;
-const uint8_t blinky = 3;
+const uint8_t inky = 3;
 const uint8_t clyde = 4;
 
 const uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
@@ -123,9 +125,10 @@ bool ghost_active[NUM_GHOSTS];
 uint8_t pacman_image, ghost_image;
 uint16_t score, hi_score, food_items;
 uint8_t stage, direction, hunting, num_cherries, num_lives;
-uint32_t tick_counter, hunt_start, stage_over_start;
+uint32_t tick_counter, game_start, hunt_start, stage_over_start;
 bool play, chomp, game_over, new_stage;
 
+// Set the IRQ mask
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
     "set_irq_mask:\n"
@@ -133,12 +136,30 @@ uint32_t set_irq_mask(uint32_t mask); asm (
     "ret\n"
 );
 
+// Set the timer counter
 uint32_t set_timer_counter(uint32_t val); asm (
     ".global set_timer_counter\n"
     "set_timer_counter:\n"
     ".word 0x0a05650b\n"
     "ret\n"
 );
+
+// Interrupt handling used for playing audio
+void irq_handler(uint32_t irqs, uint32_t* regs)
+{
+  /* timer IRQ */
+  if ((irqs & 1) != 0) {
+    // retrigger timer
+    set_timer_counter(counter_frequency);
+
+    songplayer_tick();
+  }
+}
+
+// Delay a few clock cycles - used by Nunchuk code
+void delay(uint32_t n) {
+  for (uint32_t i = 0; i < n; i++) asm volatile ("");
+}
 
 // Set all tiles on board section of screen to blank
 void clear_screen() {
@@ -217,20 +238,20 @@ void print_board() {
   }
 }  
 
-// Reset sprites to their original positions
+// Reset sprites to their original positions, and reset other state data
 void reset_positions() {
   sprite_x[pacman] = 7;
   sprite_y[pacman] = 11;
   direction = RIGHT;
 
-  sprite_x[inky] = 7;
-  sprite_y[inky] = 7;
+  sprite_x[blinky] = 7;
+  sprite_y[blinky] = 7;
 
   sprite_x[pinky] = 6;
   sprite_y[pinky] = 10;
 
-  sprite_x[blinky] = 7;
-  sprite_y[blinky] = 10;
+  sprite_x[inky] = 7;
+  sprite_y[inky] = 10;
 
   sprite_x[clyde] = 8;
   sprite_y[clyde] = 10;
@@ -261,16 +282,15 @@ void set_ghost_colours() {
   vid_set_sprite_colour(clyde, GREEN);
 }
 
-// Set up all the graphics data for board portion iof screen
+// Set up all the graphics data for board portion of screen
 void setup_screen() {
   vid_init();
   vid_set_x_ofs(0);
   vid_set_y_ofs(0);
-  int tex,x,y;
 
-  for (tex = 0; tex < 64; tex++) {
-    for (x = 0; x < 8; x++) {
-      for (y = 0 ; y < 8; y++) {
+  for (int tex = 0; tex < 64; tex++) {
+    for (int x = 0; x < 8; x++) {
+      for (int y = 0 ; y < 8; y++) {
         int texrow = tex >> 3;   // 0-7, row in texture map
         int texcol = tex & 0x07; // 0-7, column in texture map
         int pixx = (texcol<<3)+x;
@@ -281,8 +301,8 @@ void setup_screen() {
     }
   }
 
-  for (x = 0; x < 32; x++) {
-    for (y = 0; y < 32; y++) {
+  for (int x = 0; x < 32; x++) {
+    for (int y = 0; y < 32; y++) {
       vid_set_tile(x,y,tile_data[(y<<5)+x]);
     }
   }
@@ -332,21 +352,9 @@ void show_lives() {
   }
 }
 
-// Interrupt handling used for playing audio
-void irq_handler(uint32_t irqs, uint32_t* regs)
-{
-  /* timer IRQ */
-  if ((irqs & 1) != 0) {
-    // retrigger timer
-    set_timer_counter(counter_frequency);
-
-    songplayer_tick();
-  }
-}
-
 const int divisor[] = {10000,1000,100,10};
 
-// Display score, h-score or another numnber
+// Display score, hi-score or another numnber
 void show_score(int x, int y, int score) {
   int s = score;
   bool blank = true;
@@ -366,6 +374,7 @@ void show_score(int x, int y, int score) {
   }
 }
 
+// Chase a sprite or go to a target
 void chase(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y, uint8_t avoid_x, uint8_t avoid_y) {
   uint8_t n = board[*y][*x];
 #ifdef debug
@@ -385,6 +394,7 @@ void chase(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y, uint8_t a
   else if (n & CAN_GO_UP) (*y)++;
 }
 
+// Evade a sprite or go away from a target
 void evade(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y, uint8_t avoid_x, uint8_t avoid_y) {
   uint8_t n = board[*y][*x];
 #ifdef debug
@@ -404,8 +414,55 @@ void evade(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y, uint8_t a
   else if (n & CAN_GO_UP) (*y)++;
 }
 
+// Blnky behaviour
+void move_blinky() {
+  if (!ghost_active[blinky-1]) return;
+
+  uint8_t target_x = sprite_x[pacman], target_y = sprite_y[pacman];
+
+  if (ghost_eyes[blinky-1]) {
+    target_x = 7;
+    target_y = 7;
+
+    if (sprite_x[blinky] == 7 && sprite_y[blinky] == 7) {
+      sprite_y[blinky] = 9;
+      return;
+    }
+  }
+
+  if (hunting == 0 || ghost_eyes[blinky-1]) {
+    chase(target_x, target_y, &sprite_x[blinky], &sprite_y[blinky], old2_sprite_x[blinky], old2_sprite_y[blinky]);
+  } else {
+    evade(target_x, target_y, &sprite_x[blinky], &sprite_y[blinky], old2_sprite_x[blinky], old2_sprite_y[blinky]);
+  }
+}
+
+// Pinky behaviour
+void move_pinky() {
+  if (!ghost_active[pinky-1]) return;
+
+  uint8_t target_x = sprite_x[pacman], target_y = sprite_y[pacman];
+
+  if (ghost_eyes[pinky-1]) {
+    target_x = 7;
+    target_y == 7;
+    if (sprite_x[pinky] == 7 && sprite_y[pinky] == 7) {
+      sprite_y[pinky] = 10;
+      return;
+    }
+  }
+
+  if (hunting == 0 || ghost_eyes[pinky-1]) {
+    chase(target_x, target_y, &sprite_x[pinky], &sprite_y[pinky], old2_sprite_x[pinky], old2_sprite_y[pinky]);
+  } else {
+    evade(target_x, target_y, &sprite_x[pinky], &sprite_y[pinky], old2_sprite_x[pinky], old2_sprite_y[pinky]);
+  }
+}
+
 // Inky behaviour
 void move_inky() {
+  if (!ghost_active[inky-1]) return;
+
   uint8_t target_x = sprite_x[pacman], target_y = sprite_y[pacman];
 
   if (ghost_eyes[inky-1]) {
@@ -413,7 +470,7 @@ void move_inky() {
     target_y = 7;
 
     if (sprite_x[inky] == 7 && sprite_y[inky] == 7) {
-      sprite_y[inky] = 8;
+      sprite_y[inky] = 9;
       return;
     }
   }
@@ -425,28 +482,27 @@ void move_inky() {
   }
 }
 
-// Pinky behaviour
-void move_pinky() {
-  if (!ghost_active[pinky-1]) return;
-  uint8_t target_x = sprite_x[pacman], target_y = sprite_y[pacman];
-
-  if (ghost_eyes[pinky-1]) {
-    target_x = 7;
-    target_y == 7;
-  }
-}
-
-// Blinky behaviour
-void move_blinky() {
-}
-
 // Clyde behaviour
 void move_clyde() {
-}
+  if (!ghost_active[clyde-1]) return;
 
-// delay a few clock cycles - used by Nunchuk code
-void delay(uint32_t n) {
-  for (uint32_t i = 0; i < n; i++) asm volatile ("");
+  uint8_t target_x = sprite_x[pacman], target_y = sprite_y[pacman];
+
+  if (ghost_eyes[clyde-1]) {
+    target_x = 7;
+    target_y = 7;
+
+    if (sprite_x[clyde] == 7 && sprite_y[clyde] == 7) {
+      sprite_y[clyde] = 9;
+      return;
+    }
+  }
+
+  if (hunting == 0 || ghost_eyes[clyde-1]) {
+    chase(target_x, target_y, &sprite_x[clyde], &sprite_y[clyde], old2_sprite_x[clyde], old2_sprite_y[clyde]);
+  } else {
+    evade(target_x, target_y, &sprite_x[clyde], &sprite_y[clyde], old2_sprite_x[clyde], old2_sprite_y[clyde]);
+  }
 }
 
 // Main entry point
@@ -475,7 +531,6 @@ void main() {
   i2c_send_cmd(0x40, 0x00);
 
   play = false;
-  ghost_eyes[inky-1] = false;
 
   // Default high score
   hi_score = 10000;
@@ -495,8 +550,8 @@ void main() {
   // Show lives
   show_lives();
 
-  // Start inky immediately
-  ghost_active[inky-1] = true;
+  // Start Blinky immediately
+  ghost_active[blinky-1] = true;
 
   uint32_t time_waster = 0;
 
@@ -561,6 +616,7 @@ void main() {
       if (buttons < 2) { 
         setup_screen();
         setup_board();
+        game_start = tick_counter;
         play = (buttons == 0);
         if (!play) stage = 0;
         if (stage == 0) score = 0;
@@ -612,24 +668,25 @@ void main() {
       // Set Pacman sprite position
       vid_set_sprite_pos(pacman, TILE_SIZE + (sprite_x[pacman] << 4), TILE_SIZE + (sprite_y[pacman] << 4));
 
-      // Move inky
-      if (ghost_eyes[inky-1] || (tick_counter & 0xF) == 0xF) {
-        // Save last Pacman position and one before last
-        old2_sprite_x[inky] = old_sprite_x[inky];
-        old2_sprite_y[inky] = old_sprite_y[inky];
-        old_sprite_x[inky] = sprite_x[inky];
-        old_sprite_y[inky] = sprite_y[inky];
-
-        move_inky();
+      // Move ghosts
+      for(int i=0; i<NUM_GHOSTS;i++) {
+        if (ghost_eyes[i] || (tick_counter & 0xF) == 0xF) {
+          // Save last ghost position and one before last
+          old2_sprite_x[i+1] = old_sprite_x[i+1];
+          old2_sprite_y[i+1] = old_sprite_y[i+1];
+          old_sprite_x[i+1] = sprite_x[i+1];
+          old_sprite_y[+1] = sprite_y[i+1];
+          if (i+1 == blinky) move_blinky();
+        }
       }
 
       // Check for death
-      if ((sprite_x[pacman] == sprite_x[inky] && sprite_y[pacman] == sprite_y[inky]) && !ghost_eyes[inky-1]) {
+      if ((sprite_x[pacman] == sprite_x[blinky] && sprite_y[pacman] == sprite_y[blinky]) && !ghost_eyes[blinky-1]) {
         if (hunting > 0) {
           score += GHOST_POINTS;
-          vid_set_image_for_sprite(inky, ghost_images[1]);
-          vid_set_sprite_colour(inky, WHITE);
-          ghost_eyes[inky-1] = true;
+          vid_set_image_for_sprite(blinky, ghost_images[1]);
+          vid_set_sprite_colour(blinky, WHITE);
+          ghost_eyes[blinky-1] = true;
         } else {
           clear_screen();
           
@@ -639,10 +696,10 @@ void main() {
 
           // Line them up
           sprite_x[pacman] = 3; sprite_y[pacman] = 3;
-          sprite_x[inky] = 5; sprite_y[inky] = 3;
+          sprite_x[blinky] = 5; sprite_y[blinky] = 3;
           sprite_x[pinky] = 7; sprite_y[pinky] = 3;
-          sprite_x[blinky] = 9; sprite_y[blinky] = 3;
-          sprite_x[clyde] = 11; sprite_y[inky] = 3;
+          sprite_x[inky] = 9; sprite_y[inky] = 3;
+          sprite_x[clyde] = 11; sprite_y[clyde] = 3;
         }
       }
 
@@ -652,7 +709,7 @@ void main() {
       // Set ghost sprite positions and make them jump
       for(int i=0;i<NUM_GHOSTS;i++)  
         vid_set_sprite_pos(i+1, TILE_SIZE + (sprite_x[i+1] << 4), 
-                                TILE_SIZE + ((sprite_y[i+1] - ((i+1 != inky) & tick_counter & 1)) << 4));
+                                TILE_SIZE + ((sprite_y[i+1] - ((i+1 != blinky) & tick_counter & 1)) << 4));
 
       // Eat your food
       n = board[sprite_y[pacman]][sprite_x[pacman]];
@@ -682,10 +739,10 @@ void main() {
       } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // End of white phase
          hunting = 0;
          set_ghost_colours();
-         vid_enable_sprite(inky, 1);         
-         vid_set_image_for_sprite(inky, ghost_images[0]);
-         if (ghost_eyes[inky-1]) sprite_y[inky] = 7; // Let him back out
-         ghost_eyes[inky-1] = false;
+         vid_enable_sprite(blinky, 1);         
+         vid_set_image_for_sprite(blinky, ghost_images[0]);
+         if (ghost_eyes[blinky-1]) sprite_y[blinky] = 7; // Let him back out
+         ghost_eyes[blinky-1] = false;
       }
 
       // Flash ghosts when hunting
@@ -705,7 +762,7 @@ void main() {
       if (play && food_items == 0) {
         clear_screen();
         hunting = 0;
-        vid_enable_sprite(inky, 1);
+        vid_enable_sprite(blinky, 1);
         set_ghost_colours();
         stage_over_start = tick_counter;
         new_stage = true;
