@@ -55,22 +55,31 @@ extern const struct song_t song_pacman;
 #define U_TILE 26
 #define P_TILE 27
 
-#define H_TILE 32
-#define I_TILE 33
-#define S_TILE 34
-#define C_TILE 35
-#define O_TILE 36
-#define R_TILE 37
-#define E_TILE 38
+#define H_TILE 56
+#define I_TILE 57
+#define S_TILE 58
+#define C_TILE 59
+#define O_TILE 60
+#define R_TILE 61
+#define E_TILE 62
 
 #define CHERRY_TILE 42
+#define STRAWBERRY_TILE 44
 #define PACMAN_TILE 46
 
 // Point values
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
-#define CHERRIES_POINTS 100
-#define STRAWBEERIES_POINTS 500
+
+#define CHERRY_POINTS 100
+#define STRAWBERRY_POINTS 300
+#define ORANGE_POINTS 500
+#define APPLE_POINTS 700
+#define MELON_POINTS 1000
+#define GALAXIAN_POINTS 2000
+#define BELL_POINTS 3000
+#define KEY_POINTS 5000
+
 #define GHOST_POINTS 200
 
 // Board positions
@@ -145,7 +154,7 @@ bool ghost_active[NUM_GHOSTS];
 uint8_t pacman_image, ghost_image;
 uint16_t score, hi_score, old_score, food_items, ghost_points;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills;
-uint32_t tick_counter, game_start, hunt_start, stage_over_start;
+uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks;
 bool play, chomp, game_over, new_stage;
 
 // Set the IRQ mask
@@ -278,7 +287,7 @@ void reset_positions() {
   
   for(int i=0;i<NUM_GHOSTS;i++) ghost_eyes[i] = false;
 
-  num_fruit = 1;
+  num_fruit = 2;
   num_lives = 3;
   
   hunting = 0;
@@ -288,12 +297,12 @@ void reset_positions() {
 }
 
 // Add fruit to the board
-void add_fruit(uint8_t x, uint8_t y) {
+void add_fruit(uint8_t x, uint8_t y, uint8_t fruit_tile) {
   board[y][x] |= FRUIT;
-  vid_set_tile(2*x + 1,2*y + 1, CHERRY_TILE);
-  vid_set_tile(2*x + 2,2*y + 1, CHERRY_TILE+1);
-  vid_set_tile(2*x + 1,2*y + 2, CHERRY_TILE+8);
-  vid_set_tile(2*x + 2,2*y + 2, CHERRY_TILE+9);
+  vid_set_tile(2*x + 1,2*y + 1, fruit_tile);
+  vid_set_tile(2*x + 2,2*y + 1, fruit_tile+1);
+  vid_set_tile(2*x + 1,2*y + 2, fruit_tile+8);
+  vid_set_tile(2*x + 2,2*y + 2, fruit_tile+9);
 }
 
 // Set ghosts to their initial colours
@@ -379,10 +388,13 @@ void setup_screen() {
 // Display available fruit
 void show_fruit() {
   for(int i=0;i<num_fruit;i++) {
-    vid_set_tile(32 + i*2, 16, CHERRY_TILE);
-    vid_set_tile(33 + i*2, 16, CHERRY_TILE+1);
-    vid_set_tile(32 + i*2, 17, CHERRY_TILE+8);
-    vid_set_tile(33 + i*2, 17, CHERRY_TILE+9);
+    int tile = CHERRY_TILE;
+    
+    if (i == 1) tile = STRAWBERRY_TILE;
+    vid_set_tile(32 + i*2, 16, tile);
+    vid_set_tile(33 + i*2, 16, tile+1);
+    vid_set_tile(32 + i*2, 17, tile+8);
+    vid_set_tile(33 + i*2, 17, tile+9);
   }
 }
 
@@ -680,7 +692,8 @@ void main() {
       // Save score
       old_score = score;
 
-      if ((tick_counter - game_start) == FRUIT_TICKS) add_fruit(FRUIT_X, FRUIT_Y);
+      if ((tick_counter - game_start) == FRUIT_TICKS) 
+        add_fruit(FRUIT_X, FRUIT_Y, CHERRY_TILE);
 
       // Save last Pacman position and one before last
       old2_sprite_x[pacman] = old_sprite_x[pacman];
@@ -817,7 +830,7 @@ void main() {
          vid_set_tile(sprite_x[pacman]*2 + 1, sprite_y[pacman]*2 + 2, BLANK_TILE);
          vid_set_tile(sprite_x[pacman]*2 + 2, sprite_y[pacman]*2 + 2, BLANK_TILE);
 
-         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? CHERRIES_POINTS : FOOD_POINTS));
+         score += (n & BIG_FOOD ? BIG_FOOD_POINTS : ( n & FRUIT ? CHERRY_POINTS : FOOD_POINTS));
          board[sprite_y[pacman]][sprite_x[pacman]] &= ~(FOOD | BIG_FOOD | FRUIT);
          
          if (n & BIG_FOOD && !hunting) {
@@ -893,7 +906,6 @@ void main() {
         vid_set_tile(32, 7, ZERO_TILE + 1);
         vid_set_tile(33, 7, U_TILE);
         vid_set_tile(34, 7, P_TILE);
-
       } else {
         for(int i=0;i<3;i++) vid_set_tile(32+i, 7, BLANK_TILE);
       }
