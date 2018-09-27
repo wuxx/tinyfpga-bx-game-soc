@@ -52,8 +52,8 @@ extern const struct song_t song_pacman;
 
 #define ZERO_TILE 16
 
-#define U_TILE 26
-#define P_TILE 27
+#define U_TILE 7
+#define P_TILE 15
 
 #define H_TILE 56
 #define I_TILE 57
@@ -68,6 +68,8 @@ extern const struct song_t song_pacman;
 
 #define CHERRY_TILE 42
 #define STRAWBERRY_TILE 44
+#define ORANGE_TILE 26
+
 #define PACMAN_TILE 46
 
 // Point values
@@ -133,6 +135,22 @@ extern const struct song_t song_pacman;
 #define SCORE 2
 #define EYES 3
 
+// Screen positions
+#define LIVES_X 32
+#define LIVES_Y 24
+
+#define HISCORE_X 34
+#define HISCORE_Y 4
+
+#define UP_X 32
+#define UP_Y 7
+
+#define SHOW_FRUIT_X 32
+#define SHOW_FRUIT_Y 16
+
+#define SCORE_X 34
+#define SCORE_Y 8
+
 const uint8_t pacman = 0;
 const uint8_t blinky = 1;
 const uint8_t pinky = 2;
@@ -156,6 +174,7 @@ bool ghost_eyes[NUM_GHOSTS];
 bool ghost_active[NUM_GHOSTS];
 uint8_t pacman_image, ghost_image;
 uint16_t score, hi_score, old_score, food_items, ghost_points;
+uint16_t ghost_speed_counter, ghost_speed;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills;
 uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks;
 bool play, chomp, game_over, new_stage;
@@ -288,7 +307,7 @@ void reset_positions() {
   sprite_x[clyde] = 8;
   sprite_y[clyde] = 10;
 
-  num_fruit = 2;
+  num_fruit = 3;
   num_lives = 3;
   
   hunting = 0;
@@ -396,20 +415,22 @@ void show_fruit() {
     int tile = CHERRY_TILE;
     
     if (i == 1) tile = STRAWBERRY_TILE;
-    vid_set_tile(32 + i*2, 16, tile);
-    vid_set_tile(33 + i*2, 16, tile+1);
-    vid_set_tile(32 + i*2, 17, tile+8);
-    vid_set_tile(33 + i*2, 17, tile+9);
+    else if (i == 2) tile = ORANGE_TILE;
+
+    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y, tile);
+    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y, tile+1);
+    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y + 1, tile+8);
+    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y + 1, tile+9);
   }
 }
 
 // Display available lives
 void show_lives() {
   for(int i=0;i<4;i++) {
-    vid_set_tile(32 + i*2, 22, (i < num_lives ? PACMAN_TILE : BLANK_TILE));
-    vid_set_tile(33 + i*2, 22, (i < num_lives ? PACMAN_TILE+1 : BLANK_TILE));
-    vid_set_tile(32 + i*2, 23, (i < num_lives ? PACMAN_TILE+8 : BLANK_TILE));
-    vid_set_tile(33 + i*2, 23, (i < num_lives ? PACMAN_TILE+9 : BLANK_TILE));
+    vid_set_tile(LIVES_X + i*2, LIVES_Y, (i < num_lives ? PACMAN_TILE : BLANK_TILE));
+    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y, (i < num_lives ? PACMAN_TILE+1 : BLANK_TILE));
+    vid_set_tile(LIVES_X + i*2, LIVES_Y + 1, (i < num_lives ? PACMAN_TILE+8 : BLANK_TILE));
+    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y + 1, (i < num_lives ? PACMAN_TILE+9 : BLANK_TILE));
   }
 }
 
@@ -633,9 +654,6 @@ void main() {
   // Display the ready message
   show_ready();
 
-  // Start Blinky immediately
-  ghost_active[blinky-1] = true;
-
   uint32_t time_waster = 0;
 
   // Main loop
@@ -702,8 +720,13 @@ void main() {
         game_start = tick_counter;
         play = (buttons == 0);
         if (!play) stage = 0;
+        ghost_speed = (stage < 16 ? 16 - stage : 0);
+        ghost_speed_counter = 0;
         if (stage == 0) score = 0;
-        show_score(34, 12, stage);
+        show_score(SCORE_X, SCORE_Y + 4, stage);
+  
+        // Start Blinky immediately
+        ghost_active[blinky-1] = true;
       }
 
       // Save score
@@ -787,7 +810,7 @@ void main() {
 
       // Move ghosts
       for(int i=0; i<NUM_GHOSTS;i++) {
-        if (ghost_eyes[i] || (tick_counter & 0xF) == 0xF) {
+        if (ghost_eyes[i] || (ghost_speed_counter == ghost_speed)) {
           // Save last ghost position and one before last
           old2_sprite_x[i+1] = old_sprite_x[i+1];
           old2_sprite_y[i+1] = old_sprite_y[i+1];
@@ -799,6 +822,8 @@ void main() {
           else if (i+1 == clyde) move_clyde();
         }
       }
+
+      if (ghost_speed_counter++ == ghost_speed) ghost_speed_counter = 0;
 
       // Check for death
       for(int i= 0;i<NUM_GHOSTS;i++) {
@@ -884,14 +909,14 @@ void main() {
       if (score >= LIFE_POINTS && old_score < LIFE_POINTS) num_lives++;
  
       // Show the score   
-      show_score(34, 8, score);
+      show_score(SCORE_X, SCORE_Y, score);
       
       // Show hi-score
       if (score > hi_score) hi_score = score;
-      show_score(34, 4, hi_score);
+      show_score(HISCORE_X, HISCORE_Y, hi_score);
 
       // Show number of food items
-      show_score(34, 10, food_items);
+      show_score(SCORE_X, SCORE_Y + 2, food_items);
 
       // Check for stage won
       if (play && food_items == 0) {
@@ -920,9 +945,9 @@ void main() {
       
       // Flash 1UP
       if ((tick_counter & 1) == 1) {
-        vid_set_tile(32, 7, ZERO_TILE + 1);
-        vid_set_tile(33, 7, U_TILE);
-        vid_set_tile(34, 7, P_TILE);
+        vid_set_tile(UP_X, UP_Y, ZERO_TILE + 1);
+        vid_set_tile(UP_X + 1, UP_Y, U_TILE);
+        vid_set_tile(UP_X + 2, UP_Y, P_TILE);
       } else {
         for(int i=0;i<3;i++) vid_set_tile(32+i, 7, BLANK_TILE);
       }
