@@ -10,7 +10,7 @@
 
 #include "graphics_data.h"
 
-//#define debug 1
+#define debug 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -72,6 +72,11 @@ extern const struct song_t song_pacman;
 
 #define PACMAN_TILE 46
 
+#define POWER_PILL_TILE1 40
+#define POWER_PILL_TILE2 41
+#define POWER_PILL_TILE3 48
+#define POWER_PILL_TILE4 49
+
 // Point values
 #define FOOD_POINTS 10
 #define BIG_FOOD_POINTS 50
@@ -93,6 +98,30 @@ extern const struct song_t song_pacman;
 
 #define GHOST_OUT_X 7
 #define GHOST_OUT_Y 7
+
+#define PINKY_HOME_X 6
+#define PINKY_HOME_Y 9
+
+#define INKY_HOME_X 7
+#define INKY_HOME_Y 9
+
+#define CLYDE_HOME_X 8
+#define CLYDE_HOME_Y 9
+
+#define PINKY_HOME_X 6
+#define PINKY_HOME_Y 9
+
+#define POWER_PILL1_X 0
+#define POWER_PILL1_Y 1
+
+#define POWER_PILL2_X 0
+#define POWER_PILL2_Y 8
+
+#define POWER_PILL3_X 14
+#define POWER_PILL3_Y 1
+
+#define POWER_PILL4_X 14
+#define POWER_PILL4_Y 8
 
 // Directions
 #define UP 2
@@ -126,7 +155,9 @@ extern const struct song_t song_pacman;
 // Period lengths
 #define HUNT_TICKS 30
 #define STAGE_OVER_TICKS 10
-#define FRUIT_TICKS 100
+#define CHERRY_TICKS 100
+#define STRAWBERRY_TICKS 200
+#define ORANGE_TICKS 300
 
 #define PINKY_START 20
 #define INKY_START 40
@@ -228,6 +259,34 @@ void irq_handler(uint32_t irqs, uint32_t* regs)
 // Delay a few clock cycles - used by Nunchuk code
 void delay(uint32_t n) {
   for (uint32_t i = 0; i < n; i++) asm volatile ("");
+}
+
+void setup_startscreen() {
+  vid_init();
+  vid_set_x_ofs(0);
+  vid_set_y_ofs(0);
+
+  // Set up the 64 8x8 textures
+  for (int tex = 0; tex < 64; tex++) {
+    for (int x = 0; x < 8; x++) {
+      for (int y = 0 ; y < 8; y++) {
+        int texrow = tex >> 3;   // 0-7, row in texture map
+        int texcol = tex & 0x07; // 0-7, column in texture map
+        int pixx = (texcol<<3)+x;
+        int pixy = (texrow<<3)+y;
+        uint32_t pixel = -startscreen_texture_data[(pixy<<6)+pixx];
+        // Colour maping messed up - I don't knpw why
+        vid_set_texture_pixel(tex, x, y, (8 - pixel) & 0x7); 
+      }
+    }
+  }
+
+  // Set up the 32x32 tiles
+  for (int x = 0; x < 40; x++) {
+    for (int y = 0; y < 30; y++) {
+      vid_set_tile(x,y,startscreen_tile_data[(y*40)+x]);
+    }
+  }
 }
 
 // Set all tiles on board section of screen to blank
@@ -400,6 +459,13 @@ void setup_screen() {
     }
   }
 
+  // Blank the RHS of screen
+  for (int x = 32; x < 40; x++) {
+    for (int y = 0; y < 32; y++) {
+      vid_set_tile(x,y,0);
+    }
+  }
+ 
   // Reset the sprite positions
   reset_positions();
 
@@ -448,6 +514,14 @@ void show_fruit() {
   }
 }
 
+void show_big_tile(uint8_t x, uint8_t y, uint8_t t1, uint8_t t2, 
+                                         uint8_t t3, uint8_t t4) {
+  vid_set_tile(2*x+1, 2*y+1, t1);
+  vid_set_tile(2*x+2, 2*y+1, t2);
+  vid_set_tile(2*x+1, 2*y+2, t3);
+  vid_set_tile(2*x+2, 2*y+2, t4);
+}
+
 // Display available lives
 void show_lives() {
   for(int i=0;i<4;i++) {
@@ -483,7 +557,7 @@ void show_score(int x, int y, int score) {
 // Show ready message
 void show_ready() {
   for(int i=0;i<3;i++) {
-    vid_set_sprite_pos(READY + i, TILE_SIZE + ((READY_X + i) <<4), 
+    vid_set_sprite_pos(READY + i, TILE_SIZE  - 1 + ((READY_X + i) <<4), 
                               TILE_SIZE + (READY_Y <<4));
     vid_enable_sprite(READY + i, 1);
   }
@@ -702,8 +776,12 @@ void main() {
   set_irq_mask(0x00);
 
   // Set up the screen
+  setup_startscreen();
+  
+  delay(300000); 
+
   setup_screen();
-    
+ 
   // Set up the board
   setup_board();
 
@@ -890,8 +968,12 @@ void main() {
       if (!play && !auto_play) continue; 
 
       // Add fruit after a while
-      if ((tick_counter - game_start) == FRUIT_TICKS) 
-        add_fruit(FRUIT_X, FRUIT_Y, (stage == 0 ? CHERRY_TILE : STRAWBERRY_TILE));
+       if ((tick_counter - game_start) == CHERRY_TICKS) 
+        add_fruit(FRUIT_X, FRUIT_Y, CHERRY_TILE);
+       if ((tick_counter - game_start) == STRAWBERRY_TICKS) 
+        add_fruit(FRUIT_X, FRUIT_Y, STRAWBERRY_TILE);
+       if ((tick_counter - game_start) == ORANGE_TICKS) 
+        add_fruit(FRUIT_X, FRUIT_Y, ORANGE_TILE);
 
       // Save last Pacman position and one before last
       old2_sprite_x[PACMAN] = old_sprite_x[PACMAN];
@@ -1092,11 +1174,31 @@ void main() {
         for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i,0);
       }
 
-      // Flash 1UP
+      // Flash 1UP and power pills
       if ((tick_counter & 1) == 1) {
         show_1up();
+        if (board[POWER_PILL1_Y][POWER_PILL1_X] & BIG_FOOD) 
+          show_big_tile(POWER_PILL1_X, POWER_PILL1_Y, 
+                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
+        if (board[POWER_PILL2_Y][POWER_PILL2_X] & BIG_FOOD) 
+          show_big_tile(POWER_PILL2_X, POWER_PILL2_Y, 
+                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
+        if (board[POWER_PILL3_Y][POWER_PILL3_X] & BIG_FOOD) 
+          show_big_tile(POWER_PILL3_X, POWER_PILL3_Y, 
+                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
+        if (board[POWER_PILL4_Y][POWER_PILL4_X] & BIG_FOOD) 
+          show_big_tile(POWER_PILL4_X, POWER_PILL4_Y, 
+                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
       } else {
         for(int i=0;i<3;i++) vid_set_tile(32+i, 7, BLANK_TILE);
+        show_big_tile(POWER_PILL1_X, POWER_PILL1_Y, 
+                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
+        show_big_tile(POWER_PILL2_X, POWER_PILL2_Y, 
+                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
+        show_big_tile(POWER_PILL3_X, POWER_PILL3_Y, 
+                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
+        show_big_tile(POWER_PILL4_X, POWER_PILL4_Y, 
+                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
       }
     }
   }
