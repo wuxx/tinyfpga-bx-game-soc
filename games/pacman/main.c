@@ -144,13 +144,16 @@ extern const struct song_t song_pacman;
 #define PACMAN_RIGHT 1
 #define PACMAN_DOWN 2
 #define PACMAN_UP 3
-#define PACMAN_LEFT 4i
+#define PACMAN_LEFT 4
 
 #define READY_IMAGE 5
 
 #define GHOST_IMAGE 8
 #define EYES_IMAGE 9
 #define SCORE_IMAGE 10 
+
+#define EXPLODE_IMAGE1 14
+#define EXPLODE_IMAGE2 15
 
 // Period lengths
 #define HUNT_TICKS 30
@@ -223,7 +226,7 @@ bool ghost_active[NUM_GHOSTS];
 uint16_t score, hi_score, old_score, food_items, ghost_points;
 uint16_t ghost_speed_counter, ghost_speed;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills, set_ghost_eyes;
-uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks;
+uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks, life_over_start;
 bool play, chomp, game_over, life_over, new_stage;
 bool auto_play;
 
@@ -770,6 +773,17 @@ void show_1up() {
   vid_set_tile(UP_X + 2, UP_Y, P_TILE);
 }
 
+// Display HI-SCORE label
+void show_hiscore_label() {
+  vid_set_tile(32,2, H_TILE);
+  vid_set_tile(33,2, I_TILE);
+  vid_set_tile(35,2, S_TILE);
+  vid_set_tile(36,2, C_TILE);
+  vid_set_tile(37,2, O_TILE);
+  vid_set_tile(38,2, R_TILE);
+  vid_set_tile(39,2, E_TILE);
+}
+
 // Main entry point
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
@@ -816,15 +830,6 @@ void main() {
 
   skip_ticks = 0;
 
-  // Display score and HI-SCORE
-  vid_set_tile(32,2, H_TILE);
-  vid_set_tile(33,2, I_TILE);
-  vid_set_tile(35,2, S_TILE);
-  vid_set_tile(36,2, C_TILE);
-  vid_set_tile(37,2, O_TILE);
-  vid_set_tile(38,2, R_TILE);
-  vid_set_tile(39,2, E_TILE);
-
   // Display the ready message
   show_ready();
 
@@ -848,6 +853,25 @@ void main() {
         vid_set_image_for_sprite(set_ghost_eyes, EYES_IMAGE);
         vid_enable_sprite(PACMAN,1);
         set_ghost_eyes = 0;
+      }
+
+      // Lost life animation
+      if (life_over && tick_counter - life_over_start == 2)
+        vid_set_image_for_sprite(PACMAN, PACMAN_UP);
+      else if (life_over && tick_counter - life_over_start == 4) 
+        vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE1);
+      else if (life_over && tick_counter - life_over_start == 6) 
+        vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE2);
+      else if (life_over && tick_counter - life_over_start == 12) {
+        vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
+        reset_positions();
+        // Position the sprites to their home positions
+        for(int i=0;i<NUM_SPRITES;i++)
+          vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
+                                      8 + (sprite_y[i] << 4));
+        // Set the ghosts inactive
+        show_ready();
+        life_over = false;
       }
 
       // Get Nunchuk data
@@ -904,6 +928,7 @@ void main() {
       old_score = score;
 
       // Show hi-score
+      show_hiscore_label();
       show_score(HISCORE_X, HISCORE_Y, hi_score);
      
       // Show score
@@ -914,6 +939,13 @@ void main() {
 
       // Show number of food items
       show_score(SCORE_X, SCORE_Y + 2, food_items);
+
+      // Show the tick_counter since game start
+      show_score(SCORE_X, SCORE_Y + 3, tick_counter - game_start);
+
+      // Show  number of lives
+      show_score(SCORE_X, SCORE_Y + 5, num_lives);
+
       // Show fruit
       show_fruit();
 
@@ -935,6 +967,7 @@ void main() {
           setup_screen();
           setup_board();
           show_ready();
+          num_lives = 3;
         }
       }
       
@@ -968,12 +1001,16 @@ void main() {
       if (!play && !auto_play) continue; 
 
       // Add fruit after a while
-       if ((tick_counter - game_start) == CHERRY_TICKS) 
+      if ((tick_counter - game_start) == CHERRY_TICKS) 
         add_fruit(FRUIT_X, FRUIT_Y, CHERRY_TILE);
-       if ((tick_counter - game_start) == STRAWBERRY_TICKS) 
+      if ((tick_counter - game_start) == STRAWBERRY_TICKS) {
+        num_fruit++;
         add_fruit(FRUIT_X, FRUIT_Y, STRAWBERRY_TILE);
-       if ((tick_counter - game_start) == ORANGE_TICKS) 
+      }
+      if ((tick_counter - game_start) == ORANGE_TICKS) {
+        num_fruit++;
         add_fruit(FRUIT_X, FRUIT_Y, ORANGE_TILE);
+      }
 
       // Save last Pacman position and one before last
       old2_sprite_x[PACMAN] = old_sprite_x[PACMAN];
@@ -1086,20 +1123,16 @@ void main() {
               // Reset lives and fruit
               num_lives = 3;
               num_fruit = 1;
+              show_ready();
             }  else {
               life_over = true;
-              reset_positions();
-            
-              // Position the sprites to their home positions
-              for(int i=0;i<NUM_SPRITES;i++)
-                vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
-                                      8 + (sprite_y[i] << 4));
-              // Set the correct eating image
-              vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
               // Set the ghosts inactive
               for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
+            
+              // Start the explode animation
+              vid_set_image_for_sprite(PACMAN, PACMAN_ROUND);
+              life_over_start = tick_counter; 
             }
-            show_ready();
             play = false;
             break;
           }
