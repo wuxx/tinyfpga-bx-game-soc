@@ -111,9 +111,17 @@ extern const struct song_t song_pacman;
 #define WHITE 7
 
 // Sprite images
-#define GHOST_IMAGE 0
-#define EYES_IMAGE 1
-#define SCORE_IMAGE 2
+#define PACMAN_ROUND 0
+#define PACMAN_RIGHT 1
+#define PACMAN_DOWN 2
+#define PACMAN_UP 3
+#define PACMAN_LEFT 4i
+
+#define READY_IMAGE 5
+
+#define GHOST_IMAGE 8
+#define EYES_IMAGE 9
+#define SCORE_IMAGE 10 
 
 // Period lengths
 #define HUNT_TICKS 30
@@ -137,7 +145,7 @@ extern const struct song_t song_pacman;
 #define SCORE 2
 #define EYES 3
 
-// Screen positions
+// Board positions
 #define LIVES_X 32
 #define LIVES_Y 24
 
@@ -153,21 +161,32 @@ extern const struct song_t song_pacman;
 #define SCORE_X 34
 #define SCORE_Y 8
 
+#define READY_X 6
+#define READY_Y 3
+
 // Skip ticks
 #define HUNT_SCORE_TICKS 5
+
+//Sprite numbers
+#define PACMAN 0
+
+#define BLINKY 1
+#define PINKY 2
+#define INKY 3
+#define CLYDE 4 
+#define READY 5
 
 const uint8_t pacman = 0;
 const uint8_t blinky = 1;
 const uint8_t pinky = 2;
 const uint8_t inky = 3;
 const uint8_t clyde = 4;
+const uint8_t ready = 5;
 
 const uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
 
 // Working data
 uint8_t board[BOARD_HEIGHT][BOARD_WIDTH];
-uint8_t pacman_images[8];
-uint8_t ghost_images[8];
 uint8_t sprite_x[NUM_SPRITES];
 uint8_t sprite_y[NUM_SPRITES];
 uint8_t old_sprite_x[NUM_SPRITES], old_sprite_y[NUM_SPRITES];
@@ -177,7 +196,6 @@ uint8_t old_sprite_x[NUM_SPRITES], old_sprite_y[NUM_SPRITES];
 uint8_t old2_sprite_x[NUM_SPRITES], old2_sprite_y[NUM_SPRITES];
 bool ghost_eyes[NUM_GHOSTS];
 bool ghost_active[NUM_GHOSTS];
-uint8_t pacman_image, ghost_image;
 uint16_t score, hi_score, old_score, food_items, ghost_points;
 uint16_t ghost_speed_counter, ghost_speed;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills, set_ghost_eyes;
@@ -393,20 +411,22 @@ void setup_screen() {
   reset_positions();
 
   // Set up the Pacman sprite images as images 0-7 and set the image to the first one
-  for(int i=0;i<8;i++) pacman_images[i] = i;
-  for(int i=0; i<8; i++) vid_write_sprite_memory(pacman_images[i], pacman_sprites[i]);
-  pacman_image = pacman_images[1];
-  vid_set_image_for_sprite(pacman, pacman_image);
+  for(int i=0; i<8; i++) vid_write_sprite_memory(i, pacman_sprites[i]);
+  vid_set_image_for_sprite(pacman, PACMAN_RIGHT);
+
+  vid_set_image_for_sprite(ready, READY_IMAGE);
+  vid_set_image_for_sprite(ready+1, READY_IMAGE+1);
+  vid_set_image_for_sprite(ready+2, READY_IMAGE+2);
 
   // Set up the ghost sprite images as image 8-15 and set the current ghost image to the first one
-  for(int i=0;i<8;i++) ghost_images[i] = 8+i;
-  for(int i=0; i<8; i++) vid_write_sprite_memory(ghost_images[i], ghost_sprites[i]);
-  ghost_image = ghost_images[GHOST_IMAGE];
-  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, ghost_image);
+  for(int i=0; i<8; i++) vid_write_sprite_memory(GHOST_IMAGE + i, ghost_sprites[i]);
+  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, GHOST_IMAGE);
 
   // Set the sprite colours, to their defaults
   set_ghost_colours();
   vid_set_sprite_colour(pacman, YELLOW);
+
+  for(int i=0;i<3;i++) vid_set_sprite_colour(ready+i, YELLOW);
  
   // Position the sprites to their home positions
   for(int i=0;i<NUM_SPRITES;i++)
@@ -469,20 +489,16 @@ void show_score(int x, int y, int score) {
 
 // Show ready message
 void show_ready() {
-  vid_set_tile(13, 8, R_TILE);
-  vid_set_tile(14, 8, E_TILE);
-  vid_set_tile(15, 8, A_TILE);
-  vid_set_tile(16, 8, D_TILE);
-  vid_set_tile(17, 8, Y_TILE);
+  for(int i=0;i<3;i++) {
+    vid_set_sprite_pos(ready + i, TILE_SIZE + ((READY_X + i) <<4), 
+                              TILE_SIZE + (READY_Y <<4));
+    vid_enable_sprite(ready + i, 1);
+  }
 }
 
 // Remove ready message
 void remove_ready() {
-  vid_set_tile(13, 8, 12);
-  vid_set_tile(14, 8, 13);
-  vid_set_tile(15, 8, 12);
-  vid_set_tile(16, 8, 13);
-  vid_set_tile(17, 8, 12);
+  for(int i=0;i<3;i++) vid_enable_sprite(ready + i, 0);
 }
 
 // Chase a sprite or go to a target
@@ -541,7 +557,7 @@ void move_blinky() {
     if (sprite_x[blinky] == 7 && sprite_y[blinky] == 7) {
       sprite_y[blinky] = 8;
       ghost_eyes[blinky-1] = false;
-      vid_set_image_for_sprite(blinky, ghost_image);
+      vid_set_image_for_sprite(blinky, GHOST_IMAGE);
       vid_set_sprite_colour(blinky, RED);
       return;
     } else if (sprite_x[blinky] == 7 && sprite_y[blinky] == 8) {
@@ -578,7 +594,7 @@ void move_pinky() {
     if (sprite_x[pinky] == 7 && sprite_y[pinky] == 7) {
       sprite_x[pinky] = 8;
       ghost_eyes[pinky-1] = false;
-      vid_set_image_for_sprite(pinky, ghost_image);
+      vid_set_image_for_sprite(pinky, GHOST_IMAGE);
       vid_set_sprite_colour(pinky, MAGENTA);
       return;
     } else if (sprite_x[pinky] == 7 && sprite_y[pinky] == 8) {
@@ -610,7 +626,7 @@ void move_inky() {
     if (sprite_x[inky] == 7 && sprite_y[inky] == 7) {
       sprite_x[inky] = 8;
       ghost_eyes[inky-1] = false;
-      vid_set_image_for_sprite(inky, ghost_image);
+      vid_set_image_for_sprite(inky, GHOST_IMAGE);
       vid_set_sprite_colour(inky, CYAN);
       return;
     } else if (sprite_x[inky] == 7 && sprite_y[inky] == 8) {
@@ -647,7 +663,7 @@ void move_clyde() {
     if (sprite_x[clyde] == 7 && sprite_y[clyde] == 7) {
       sprite_x[clyde] = 8;
       ghost_eyes[clyde-1] = false;
-      vid_set_image_for_sprite(clyde, ghost_image);
+      vid_set_image_for_sprite(clyde, GHOST_IMAGE);
       vid_set_sprite_colour(clyde, CYAN);
       return;
     } else if (sprite_x[clyde] == 7 && sprite_y[clyde] == 8) {
@@ -673,7 +689,7 @@ void end_hunt() {
 
   for(int i=0;i<NUM_GHOSTS;i++) {
     vid_enable_sprite(i+1, 1);         
-    vid_set_image_for_sprite(i+1, ghost_images[0]);
+    vid_set_image_for_sprite(i+1, GHOST_IMAGE);
     ghost_eyes[i] = false; 
   } 
 
@@ -758,7 +774,7 @@ void main() {
 
       // Delayed set of sprite to eyes
       if (set_ghost_eyes > 0) {
-        vid_set_image_for_sprite(set_ghost_eyes, ghost_images[EYES_IMAGE]);
+        vid_set_image_for_sprite(set_ghost_eyes, EYES_IMAGE);
         vid_enable_sprite(pacman,1);
         set_ghost_eyes = 0;
       }
@@ -977,7 +993,7 @@ void main() {
              sprite_y[pacman] == sprite_y[i+1]) && !ghost_eyes[i]) {
           if (hunting > 0) {
             score += ghost_points;
-            vid_set_image_for_sprite(i+1, ghost_images[SCORE_IMAGE+kills++]);
+            vid_set_image_for_sprite(i+1, SCORE_IMAGE + kills++);
             vid_set_sprite_colour(i+1, WHITE);
             skip_ticks = HUNT_SCORE_TICKS;
             set_ghost_eyes = i+1;
@@ -1004,8 +1020,7 @@ void main() {
                 vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
                                       8 + (sprite_y[i] << 4));
               // Set the correct eating image
-              pacman_image = pacman_images[1];
-              vid_set_image_for_sprite(pacman, pacman_image);
+              vid_set_image_for_sprite(pacman, PACMAN_RIGHT);
               // Set the ghosts inactive
               for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
             }
@@ -1019,7 +1034,7 @@ void main() {
       if (game_over || life_over) continue;
 
       // Set the approriate Pacman image
-      vid_set_image_for_sprite(pacman, pacman_images[chomp ?  pacman_images[1 + direction] : 0]);
+      vid_set_image_for_sprite(pacman, PACMAN_ROUND + chomp ?  1 + direction : 0);
 
       // Set ghost sprite positions and make them jump (other than blinky)
       for(int i=0;i<NUM_GHOSTS;i++)  
