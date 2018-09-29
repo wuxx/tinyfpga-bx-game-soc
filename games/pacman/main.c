@@ -10,7 +10,7 @@
 
 #include "graphics_data.h"
 
-#define debug 1
+//#define debug 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -52,19 +52,9 @@ extern const struct song_t song_pacman;
 
 #define ZERO_TILE 16
 
-#define U_TILE 7
-#define P_TILE 15
+#define U_TILE 32
 
 #define H_TILE 56
-#define I_TILE 57
-#define S_TILE 58
-#define C_TILE 59
-#define O_TILE 60
-#define R_TILE 61
-#define E_TILE 62
-#define A_TILE 63
-#define D_TILE 32
-#define Y_TILE 33
 
 #define CHERRY_TILE 42
 #define STRAWBERRY_TILE 44
@@ -123,6 +113,24 @@ extern const struct song_t song_pacman;
 #define POWER_PILL4_X 14
 #define POWER_PILL4_Y 8
 
+#define HI_SCORE_X 32
+#define HI_SCORE_Y 2
+
+#define LIVES_X 32
+#define LIVES_Y 24
+
+#define UP_X 32 
+#define UP_Y 7
+
+#define SHOW_FRUIT_X 32
+#define SHOW_FRUIT_Y 16
+
+#define SCORE_X 34
+#define SCORE_Y 8
+
+#define READY_X 6
+#define READY_Y 3
+
 // Directions
 #define UP 2
 #define DOWN 1
@@ -178,25 +186,6 @@ extern const struct song_t song_pacman;
 #define ACTIVE 1
 #define SCORE 2
 #define EYES 3
-
-// Board positions
-#define LIVES_X 32
-#define LIVES_Y 24
-
-#define HISCORE_X 34
-#define HISCORE_Y 4
-
-#define UP_X 32
-#define UP_Y 7
-
-#define SHOW_FRUIT_X 32
-#define SHOW_FRUIT_Y 16
-
-#define SCORE_X 34
-#define SCORE_Y 8
-
-#define READY_X 6
-#define READY_Y 3
 
 // Skip ticks
 #define HUNT_SCORE_TICKS 5
@@ -278,16 +267,16 @@ void setup_startscreen() {
         int pixx = (texcol<<3)+x;
         int pixy = (texrow<<3)+y;
         uint32_t pixel = -startscreen_texture_data[(pixy<<6)+pixx];
-        // Colour maping messed up - I don't knpw why
+        // Colour maping messed up - I don't know why
         vid_set_texture_pixel(tex, x, y, (8 - pixel) & 0x7); 
       }
     }
   }
 
-  // Set up the 32x32 tiles
+  // Set up the 40 x 30 tiles
   for (int x = 0; x < 40; x++) {
     for (int y = 0; y < 30; y++) {
-      vid_set_tile(x,y,startscreen_tile_data[(y*40)+x]);
+      vid_set_tile(x,y + 30,startscreen_tile_data[(y*40)+x]);
     }
   }
 }
@@ -769,19 +758,34 @@ void end_hunt() {
 
 void show_1up() {
   vid_set_tile(UP_X, UP_Y, ZERO_TILE + 1);
-  vid_set_tile(UP_X + 1, UP_Y, U_TILE);
-  vid_set_tile(UP_X + 2, UP_Y, P_TILE);
+  for(int i=0;i<2;i++) vid_set_tile(UP_X + i + 1, UP_Y, U_TILE + i);
 }
 
 // Display HI-SCORE label
 void show_hiscore_label() {
-  vid_set_tile(32,2, H_TILE);
-  vid_set_tile(33,2, I_TILE);
-  vid_set_tile(35,2, S_TILE);
-  vid_set_tile(36,2, C_TILE);
-  vid_set_tile(37,2, O_TILE);
-  vid_set_tile(38,2, R_TILE);
-  vid_set_tile(39,2, E_TILE);
+  for (int i=0; i<8; i++) vid_set_tile(HI_SCORE_X + i, HI_SCORE_Y, H_TILE + i);
+}
+
+// Show the start screen
+void show_start_screen() {
+  // Set up the screen
+  clear_screen();
+  setup_startscreen();
+
+  show_score(16, 33, 10000);
+ 
+  show_score(6, 33, 0);
+
+  show_score(26, 33, 0);
+ 
+  for(int i = 0; i < 240; i++) {
+    vid_set_y_ofs(i);
+    delay(1000);
+  }
+
+  delay(10000);
+ 
+  clear_screen();
 }
 
 // Main entry point
@@ -789,10 +793,7 @@ void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
   set_irq_mask(0x00);
 
-  // Set up the screen
-  setup_startscreen();
-  
-  delay(300000); 
+  show_start_screen();
 
   setup_screen();
  
@@ -929,7 +930,7 @@ void main() {
 
       // Show hi-score
       show_hiscore_label();
-      show_score(HISCORE_X, HISCORE_Y, hi_score);
+      show_score(HI_SCORE_X + 2, HI_SCORE_Y + 2, hi_score);
      
       // Show score
       show_score(SCORE_X, SCORE_Y, score);
