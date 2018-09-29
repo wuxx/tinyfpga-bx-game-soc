@@ -10,7 +10,8 @@
 
 #include "graphics_data.h"
 
-#define debug 1
+//#define debug 1
+#define diag 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -166,9 +167,7 @@ extern const struct song_t song_pacman;
 // Period lengths
 #define HUNT_TICKS 30
 #define STAGE_OVER_TICKS 10
-#define CHERRY_TICKS 100
-#define STRAWBERRY_TICKS 200
-#define ORANGE_TICKS 300
+#define FRUIT_TICKS 100
 
 #define PINKY_START 20
 #define INKY_START 40
@@ -213,7 +212,7 @@ uint8_t old2_sprite_x[NUM_SPRITES], old2_sprite_y[NUM_SPRITES];
 bool ghost_eyes[NUM_GHOSTS];
 bool ghost_active[NUM_GHOSTS];
 uint16_t score, hi_score, old_score, food_items, ghost_points;
-uint16_t ghost_speed_counter, ghost_speed;
+uint16_t ghost_speed_counter, ghost_speed, fruit_counter;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills, set_ghost_eyes;
 uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks, life_over_start;
 bool play, chomp, game_over, life_over, new_stage;
@@ -253,6 +252,7 @@ void delay(uint32_t n) {
   for (uint32_t i = 0; i < n; i++) asm volatile ("");
 }
 
+// Set up the player selection start screen
 void setup_startscreen() {
   vid_init();
   vid_set_x_ofs(0);
@@ -277,6 +277,35 @@ void setup_startscreen() {
   for (int x = 0; x < 40; x++) {
     for (int y = 0; y < 30; y++) {
       vid_set_tile(x,y + 30,startscreen_tile_data[(y*40)+x]);
+    }
+  }
+}
+
+// Set up the introl/help screen
+void setup_intro() {
+  vid_init();
+  vid_set_x_ofs(0);
+  vid_set_y_ofs(0);
+
+  // Set up the 64 8x8 textures
+  for (int tex = 0; tex < 64; tex++) {
+    for (int x = 0; x < 8; x++) {
+      for (int y = 0 ; y < 8; y++) {
+        int texrow = tex >> 3;   // 0-7, row in texture map
+        int texcol = tex & 0x07; // 0-7, column in texture map
+        int pixx = (texcol<<3)+x;
+        int pixy = (texrow<<3)+y;
+        uint32_t pixel = - intro_texture_data[(pixy<<6)+pixx];
+        // Colour maping messed up - I don't know why
+        vid_set_texture_pixel(tex, x, y, (8 - pixel) & 0x7); 
+      }
+    }
+  }
+
+  // Set up the 40 x 30 tiles
+  for (int x = 0; x < 40; x++) {
+    for (int y = 0; y < 30; y++) {
+      vid_set_tile(x,y + 30,intro_tile_data[(y*40)+x]);
     }
   }
 }
@@ -397,8 +426,12 @@ void reset_positions() {
 }
 
 // Add fruit to the board
-void add_fruit(uint8_t x, uint8_t y, uint8_t fruit_tile) {
+void add_fruit(uint8_t x, uint8_t y) {
+  if (board[y][x] & FRUIT) return;
   board[y][x] |= FRUIT;
+  food_items++;
+  uint8_t fruit_tile = (stage == 1 ?  CHERRY_TILE : 
+                        stage == 2 ? STRAWBERRY_TILE : ORANGE_TILE);
   vid_set_tile(2*x + 1,2*y + 1, fruit_tile);
   vid_set_tile(2*x + 2,2*y + 1, fruit_tile+1);
   vid_set_tile(2*x + 1,2*y + 2, fruit_tile+8);
@@ -506,7 +539,7 @@ void show_fruit() {
     int tile = CHERRY_TILE;
     
     if (i == 1) tile = STRAWBERRY_TILE;
-    else if (i == 2) tile = ORANGE_TILE;
+    else if (i >= 2) tile = ORANGE_TILE;
 
     vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y, (i >= num_fruit ? BLANK_TILE : tile));
     vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y, (i >= num_fruit ? BLANK_TILE : tile + 1));
@@ -797,6 +830,28 @@ void show_start_screen() {
   clear_screen();
 }
 
+// Show the intro screen
+void show_intro_screen() {
+  // Set up the screen
+  clear_screen();
+  setup_intro();
+
+  show_score(16, 33, hi_score);
+ 
+  show_score(6, 33, score);
+
+  show_score(26, 33, 0);
+ 
+  for(int i = 0; i < 240; i++) {
+    vid_set_y_ofs(i);
+    delay(1000);
+  }
+
+  delay(10000);
+ 
+  clear_screen();
+}
+
 // Main entry point
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
@@ -807,6 +862,8 @@ void main() {
   score = 0;
 
   show_start_screen();
+
+  show_intro_screen();
 
   setup_screen();
  
@@ -951,7 +1008,8 @@ void main() {
      
       // Show score
       show_score(SCORE_X, SCORE_Y, score);
- 
+
+#ifdef diag 
       // Show stage
       show_score(SCORE_X, SCORE_Y + 4, stage);
 
@@ -963,6 +1021,7 @@ void main() {
 
       // Show  number of lives
       show_score(SCORE_X, SCORE_Y + 5, num_lives);
+#endif
 
       // Show fruit
       show_fruit();
@@ -1004,6 +1063,8 @@ void main() {
             chomp = true; // Start with open mouth image
             game_over = false;
             life_over = false;
+            num_fruit = (stage <= 7 ? stage : 7);
+            fruit_counter = 0;
           }
           play = true;
         } else { // Auto play
@@ -1018,15 +1079,9 @@ void main() {
       if (!play && !auto_play) continue; 
 
       // Add fruit after a while
-      if ((tick_counter - game_start) == CHERRY_TICKS) 
-        add_fruit(FRUIT_X, FRUIT_Y, CHERRY_TILE);
-      if ((tick_counter - game_start) == STRAWBERRY_TICKS) {
-        num_fruit++;
-        add_fruit(FRUIT_X, FRUIT_Y, STRAWBERRY_TILE);
-      }
-      if ((tick_counter - game_start) == ORANGE_TICKS) {
-        num_fruit++;
-        add_fruit(FRUIT_X, FRUIT_Y, ORANGE_TILE);
+      if (fruit_counter++ == FRUIT_TICKS) {
+        add_fruit(FRUIT_X, FRUIT_Y);
+        fruit_counter = 0;
       }
 
       // Save last Pacman position and one before last
@@ -1137,7 +1192,6 @@ void main() {
               score = 0;
               // Reset lives and fruit
               num_lives = 3;
-              num_fruit = 1;
             } 
             life_over = true;
             // Set the ghosts inactive
@@ -1167,7 +1221,8 @@ void main() {
       // Eat your food
       n = board[sprite_y[PACMAN]][sprite_x[PACMAN]];
       if (n & FOOD || n & BIG_FOOD || n & FRUIT) {
-         food_items--;
+         if (n & FOOD | n & BIG_FOOD) food_items--;
+         if (n & FRUIT) food_items--;
 
          vid_set_tile(sprite_x[PACMAN]*2 + 1, sprite_y[PACMAN]*2 + 1, BLANK_TILE);
          vid_set_tile(sprite_x[PACMAN]*2 + 2, sprite_y[PACMAN]*2 + 1, BLANK_TILE);
@@ -1175,7 +1230,8 @@ void main() {
          vid_set_tile(sprite_x[PACMAN]*2 + 2, sprite_y[PACMAN]*2 + 2, BLANK_TILE);
 
          score += (n & BIG_FOOD ? BIG_FOOD_POINTS : 
-                  ( n & FRUIT ? (stage == 0 ? CHERRY_POINTS : STRAWBERRY_POINTS) : FOOD_POINTS));
+                  ( n & FRUIT ? (stage == 1 ? CHERRY_POINTS : 
+                                (stage == 2 ? STRAWBERRY_POINTS : ORANGE_POINTS)) : FOOD_POINTS));
          board[sprite_y[PACMAN]][sprite_x[PACMAN]] &= ~(FOOD | BIG_FOOD | FRUIT);
          
          if (n & BIG_FOOD && !hunting) {
