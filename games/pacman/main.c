@@ -61,6 +61,8 @@ extern const struct song_t song_pacman;
 #define STRAWBERRY_TILE 44
 #define ORANGE_TILE 26
 
+#define GAME_OVER_TILE 28
+
 #define PACMAN_TILE 46
 
 #define POWER_PILL_TILE1 40
@@ -131,6 +133,9 @@ extern const struct song_t song_pacman;
 
 #define READY_X 6
 #define READY_Y 3
+
+#define GAME_OVER_X 7
+#define GAME_OVER_Y 3
 
 // Directions
 #define UP 2
@@ -602,6 +607,16 @@ void remove_ready() {
   for(int i=0;i<3;i++) vid_enable_sprite(READY + i, 0);
 }
 
+// Game over message
+void show_game_over() {
+  show_big_tile(GAME_OVER_X, GAME_OVER_Y, 
+                GAME_OVER_TILE, GAME_OVER_TILE + 1,
+                GAME_OVER_TILE + 8, GAME_OVER_TILE + 9);
+  show_big_tile(GAME_OVER_X + 1, GAME_OVER_Y, 
+                GAME_OVER_TILE + 2, GAME_OVER_TILE + 3,
+                GAME_OVER_TILE + 10, GAME_OVER_TILE + 11);
+}
+
 // Chase a sprite or go to a target
 void chase(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y, 
            uint8_t avoid_x, uint8_t avoid_y) {
@@ -899,7 +914,7 @@ void main() {
 
   // Display the ready message
   show_ready();
-
+  
   uint32_t time_waster = 0;
 
   // Main loop
@@ -1192,6 +1207,7 @@ void main() {
               score = 0;
               // Reset lives and fruit
               num_lives = 3;
+              show_game_over();
             } 
             life_over = true;
             // Set the ghosts inactive
