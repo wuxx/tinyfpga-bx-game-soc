@@ -10,7 +10,7 @@
 
 #include "graphics_data.h"
 
-//#define debug 1
+#define debug 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -282,8 +282,17 @@ void setup_startscreen() {
 }
 
 // Set all tiles on board section of screen to blank
-void clear_screen() {
+void clear_board() {
  for (int x = 0; x < 32; x++) {
+    for (int y = 0; y < 32; y++) {
+      vid_set_tile(x,y,BLANK_TILE);
+    }
+  } 
+}
+
+// Set the whole screen to blank tiles
+void clear_screen() {
+ for (int x = 0; x < 40; x++) {
     for (int y = 0; y < 32; y++) {
       vid_set_tile(x,y,BLANK_TILE);
     }
@@ -772,9 +781,9 @@ void show_start_screen() {
   clear_screen();
   setup_startscreen();
 
-  show_score(16, 33, 10000);
+  show_score(16, 33, hi_score);
  
-  show_score(6, 33, 0);
+  show_score(6, 33, score);
 
   show_score(26, 33, 0);
  
@@ -792,6 +801,10 @@ void show_start_screen() {
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
   set_irq_mask(0x00);
+
+  // Default high score
+  hi_score = 10000;
+  score = 0;
 
   show_start_screen();
 
@@ -821,12 +834,8 @@ void main() {
   play = false;
   auto_play = false;
 
-  // Default high score
-  hi_score = 10000;
-
   num_lives = 3;
   num_fruit = 1;
-  score = 0;
   stage = 1;
 
   skip_ticks = 0;
@@ -843,7 +852,7 @@ void main() {
       // Update tick counter
       tick_counter++;
 
-      // Wait a while. Used to shoe ghost kill score
+      // Wait a while. Used to show ghost kill score
       if (skip_ticks > 0) {
         skip_ticks--;
         continue;
@@ -865,12 +874,20 @@ void main() {
         vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE2);
       else if (life_over && tick_counter - life_over_start == 12) {
         vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
-        reset_positions();
-        // Position the sprites to their home positions
-        for(int i=0;i<NUM_SPRITES;i++)
-          vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
-                                      8 + (sprite_y[i] << 4));
-        // Set the ghosts inactive
+        if (game_over) {
+          // Disable sprites
+          for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
+          clear_screen();
+          show_start_screen();
+          setup_screen();
+          setup_board();
+        } else {
+          reset_positions();
+          // Position the sprites to their home positions
+          for(int i=0;i<NUM_SPRITES;i++)
+            vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
+                                  8 + (sprite_y[i] << 4));
+        }
         show_ready();
         life_over = false;
       }
@@ -960,15 +977,14 @@ void main() {
       if (new_stage) {
         show_board();
         if ((tick_counter - stage_over_start) < STAGE_OVER_TICKS) { 
-          if (tick_counter & 1) set_board_colour(WHITE);
-          else set_board_colour(BLUE);
+          set_board_colour(tick_counter & 1 ? WHITE : BLUE);
         } else {
           new_stage = false;
           set_board_colour(BLUE);
           setup_screen();
           setup_board();
           show_ready();
-          num_lives = 3;
+          num_lives = 3; // This is probably wrong
         }
       }
       
@@ -1119,28 +1135,24 @@ void main() {
               game_over = true;
               stage = 1;
               score = 0;
-              setup_screen();
-              setup_board();             
               // Reset lives and fruit
               num_lives = 3;
               num_fruit = 1;
-              show_ready();
-            }  else {
-              life_over = true;
-              // Set the ghosts inactive
-              for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
+            } 
+            life_over = true;
+            // Set the ghosts inactive
+            for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
             
-              // Start the explode animation
-              vid_set_image_for_sprite(PACMAN, PACMAN_ROUND);
-              life_over_start = tick_counter; 
-            }
+            // Start the explode animation
+            vid_set_image_for_sprite(PACMAN, PACMAN_ROUND);
+            life_over_start = tick_counter; 
             play = false;
             break;
           }
         }
       }
 
-      if (game_over || life_over) continue;
+      if (life_over) continue;
 
       // Set the approriate Pacman image
       vid_set_image_for_sprite(PACMAN, PACMAN_ROUND + chomp ?  1 + direction : 0);
@@ -1200,7 +1212,7 @@ void main() {
       // Check for stage won
       if (play && food_items == 0) {
         end_hunt();
-        clear_screen();
+        clear_board();
         stage_over_start = tick_counter;
         new_stage = true;
         stage++;
