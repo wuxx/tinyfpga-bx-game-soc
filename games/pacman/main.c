@@ -197,9 +197,9 @@ extern const struct song_t song_pacman;
 //Sprite numbers
 #define PACMAN 0
 
-#define BLINKY 1
+#define INKY 1
 #define PINKY 2
-#define INKY 3
+#define BLINKY 3
 #define CLYDE 4 
 #define READY 5
 
@@ -286,11 +286,8 @@ void setup_startscreen() {
   }
 }
 
-// Set up the introl/help screen
-void setup_intro() {
-  vid_init();
-  vid_set_x_ofs(0);
-  vid_set_y_ofs(0);
+// Set up the intro textures
+void setup_intro_textures () {
 
   // Set up the 64 8x8 textures
   for (int tex = 0; tex < 64; tex++) {
@@ -306,11 +303,15 @@ void setup_intro() {
       }
     }
   }
+}
+
+// Set up the intro tiles
+void setup_intro_tiles (uint8_t start, uint8_t end) {
 
   // Set up the 40 x 30 tiles
   for (int x = 0; x < 40; x++) {
-    for (int y = 0; y < 30; y++) {
-      vid_set_tile(x,y + 30,intro_tile_data[(y*40)+x]);
+    for (int y = start; y < end; y++) {
+      vid_set_tile(x,y,intro_tile_data[(y*40)+x]);
     }
   }
 }
@@ -470,6 +471,24 @@ void set_board_colour(uint8_t color) {
   }
 }
 
+void setup_sprites() {
+  // Set up the Pacman sprite images as images 0-7 and set the image to the first one
+  for(int i=0; i<8; i++) vid_write_sprite_memory(i, pacman_sprites[i]);
+  vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
+
+  vid_set_image_for_sprite(READY, READY_IMAGE);
+  vid_set_image_for_sprite(READY+1, READY_IMAGE+1);
+  vid_set_image_for_sprite(READY+2, READY_IMAGE+2);
+
+  // Set up the ghost sprite images as image 8-15 and set the current ghost image to the first one
+  for(int i=0; i<8; i++) vid_write_sprite_memory(GHOST_IMAGE + i, ghost_sprites[i]);
+  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, GHOST_IMAGE);
+
+  // Set the sprite colours, to their defaults
+  set_ghost_colours();
+  vid_set_sprite_colour(PACMAN, YELLOW);
+}
+
 // Set up all the graphics data for board portion of screen
 void setup_screen() {
   // Initialse the video and set offset to (0,0)
@@ -508,22 +527,9 @@ void setup_screen() {
   // Reset the sprite positions
   reset_positions();
 
-  // Set up the Pacman sprite images as images 0-7 and set the image to the first one
-  for(int i=0; i<8; i++) vid_write_sprite_memory(i, pacman_sprites[i]);
-  vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
-
-  vid_set_image_for_sprite(READY, READY_IMAGE);
-  vid_set_image_for_sprite(READY+1, READY_IMAGE+1);
-  vid_set_image_for_sprite(READY+2, READY_IMAGE+2);
-
-  // Set up the ghost sprite images as image 8-15 and set the current ghost image to the first one
-  for(int i=0; i<8; i++) vid_write_sprite_memory(GHOST_IMAGE + i, ghost_sprites[i]);
-  for(int i=0;i<NUM_GHOSTS;i++) vid_set_image_for_sprite(i+1, GHOST_IMAGE);
-
-  // Set the sprite colours, to their defaults
-  set_ghost_colours();
-  vid_set_sprite_colour(PACMAN, YELLOW);
-
+  // Setup sprites
+  setup_sprites();
+ 
   for(int i=0;i<3;i++) vid_set_sprite_colour(READY+i, YELLOW);
  
   // Position the sprites to their home positions
@@ -847,23 +853,59 @@ void show_start_screen() {
 
 // Show the intro screen
 void show_intro_screen() {
-  // Set up the screen
+  vid_set_x_ofs(0);
+  vid_set_y_ofs(0);
+  
+// Set up the screen
   clear_screen();
-  setup_intro();
+  setup_intro_textures();
+  setup_sprites();
 
-  show_score(16, 33, hi_score);
- 
-  show_score(6, 33, score);
+  setup_intro_tiles(0,6);
 
-  show_score(26, 33, 0);
+  show_score(16, 3, hi_score);
  
-  for(int i = 0; i < 240; i++) {
-    vid_set_y_ofs(i);
-    delay(1000);
+  show_score(3, 3, score);
+
+  show_score(26, 3, 0);
+
+  delay(50000);
+ 
+  for(int i = 0; i < 4; i++) {
+    setup_intro_tiles(7 + 2*i, 9 + 2*i); 
+    vid_set_sprite_pos(i+1, 50, 60 + 16*i);
+    vid_enable_sprite(i+1, 1);
+    delay(50000);
   }
 
-  delay(10000);
+  setup_intro_tiles(15, 30); 
+  delay(50000);
+
+  // Place the pac-dot
+  vid_set_tile(5,25, 28);
+  vid_set_sprite_pos(PACMAN, 200, 196);
+  vid_set_image_for_sprite(PACMAN, PACMAN_LEFT);
+  vid_enable_sprite(PACMAN, 1);
+
+  for(int i=0; i<NUM_GHOSTS; i++) {
+    vid_set_sprite_pos(i+1, 224 + i*24, 196);
+    vid_enable_sprite(i+1, 1);
+  }
+
+  for(int i=0; i<11; i++) {
+    vid_set_sprite_pos(PACMAN, 200 - i * 16, 196);
+    vid_set_image_for_sprite(PACMAN, (i &1 ? PACMAN_LEFT : PACMAN_ROUND));
+    
+    for(int j=0; j<NUM_GHOSTS; j++) {
+      vid_set_sprite_pos(j+1, 224 + j*24 - i * 16, 196);
+    }
+
+    delay(10000);
+  }
  
+  delay(200000);
+ 
+  for(int i=0;i<NUM_GHOSTS;i++) vid_enable_sprite(i+1, 0);
   clear_screen();
 }
 
