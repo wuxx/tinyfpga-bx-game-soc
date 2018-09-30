@@ -10,7 +10,7 @@
 
 #include "graphics_data.h"
 
-//#define debug 1
+#define debug 1
 #define diag 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
@@ -50,6 +50,8 @@ extern const struct song_t song_pacman;
 #define BIG_FOOD_TILE2 41
 #define BIG_FOOD_TILE3 48
 #define BIG_FOOD_TILE4 49
+
+#define RED_ONE_TILE 15
 
 #define ZERO_TILE 16
 
@@ -194,6 +196,25 @@ extern const struct song_t song_pacman;
 // Skip ticks
 #define HUNT_SCORE_TICKS 5
 
+// Screen positions
+#define START_HI_SCORE_X 16
+#define START_HI_SCORE_Y 33
+
+#define START_1UP_SCORE_X 6
+#define START_1UP_SCORE_Y 33
+
+#define START_2UP_SCORE_X 26
+#define START_2UP_SCORE_Y 33
+
+#define INTRO_HI_SCORE_X 16
+#define INTRO_HI_SCORE_Y 3
+
+#define INTRO_1UP_SCORE_X 3
+#define INTRO_1UP_SCORE_Y 3
+
+#define INTRO_2UP_SCORE_X 26
+#define INTRO_2UP_SCORE_Y 3
+
 //Sprite numbers
 #define PACMAN 0
 
@@ -222,6 +243,7 @@ uint8_t stage, direction, hunting, num_fruit, num_lives, kills, set_ghost_eyes;
 uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks, life_over_start;
 bool play, chomp, game_over, life_over, new_stage;
 bool auto_play;
+uint8_t buttons, jx, jy, num_players;
 
 // Set the IRQ mask
 uint32_t set_irq_mask(uint32_t mask); asm (
@@ -462,7 +484,7 @@ void set_board_colour(uint8_t color) {
         int pixx = (texcol<<3)+x;
         int pixy = (texrow<<3)+y;
         uint32_t pixel = texture_data[(pixy<<6)+pixx];
-        if (pixel != 0 && tex < 16 && tex != 0 && tex != 4 && 
+        if (pixel != 0 && tex < 15 && tex != 0 && tex != 4 && 
             tex != 5 && tex != 12 && tex != 13) 
           pixel = color;
         vid_set_texture_pixel(tex, x, y, pixel);
@@ -820,7 +842,7 @@ void end_hunt() {
 }
 
 void show_1up() {
-  vid_set_tile(UP_X, UP_Y, ZERO_TILE + 1);
+  vid_set_tile(UP_X, UP_Y, RED_ONE_TILE);
   for(int i=0;i<2;i++) vid_set_tile(UP_X + i + 1, UP_Y, U_TILE + i);
 }
 
@@ -829,26 +851,38 @@ void show_hiscore_label() {
   for (int i=0; i<8; i++) vid_set_tile(HI_SCORE_X + i, HI_SCORE_Y, H_TILE + i);
 }
 
-// Show the start screen
-void show_start_screen() {
-  // Set up the screen
-  clear_screen();
-  setup_startscreen();
+void get_input() {
+  // Get Nunchuk data
+  i2c_send_reg(0x00);
+  delay(100);
 
-  show_score(16, 33, hi_score);
- 
-  show_score(6, 33, score);
+  jx = i2c_read();
+#ifdef debug
+  print("Joystick x: ");
+  print_hex(jx, 2);
+  print("\n");
+#endif
 
-  show_score(26, 33, 0);
- 
-  for(int i = 0; i < 240; i++) {
-    vid_set_y_ofs(i);
-    delay(1000);
-  }
+  jy = i2c_read();
+#ifdef debug
+  print("Joystick y: ");
+  print_hex(jy, 2);
+  print("\n:1");
+#endif
 
-  delay(10000);
- 
-  clear_screen();
+  uint8_t ax = i2c_read();
+
+  uint8_t ay = i2c_read();
+
+  uint8_t az = i2c_read();
+
+  uint8_t rest = i2c_read();
+#ifdef debug
+  print("Buttons: ");
+  print_hex(rest & 3, 2);
+  print("\n");
+#endif      
+  buttons = rest & 3;
 }
 
 // Show the intro screen
@@ -863,11 +897,11 @@ void show_intro_screen() {
 
   setup_intro_tiles(0,6);
 
-  show_score(16, 3, hi_score);
+  show_score(INTRO_HI_SCORE_X, INTRO_HI_SCORE_Y, hi_score);
  
-  show_score(3, 3, score);
+  show_score(INTRO_1UP_SCORE_X, INTRO_1UP_SCORE_Y, score);
 
-  show_score(26, 3, 0);
+  show_score(INTRO_1UP_SCORE_X, INTRO_1UP_SCORE_Y, 0);
 
   delay(50000);
  
@@ -875,38 +909,97 @@ void show_intro_screen() {
     setup_intro_tiles(7 + 2*i, 9 + 2*i); 
     vid_set_sprite_pos(i+1, 50, 60 + 16*i);
     vid_enable_sprite(i+1, 1);
+    get_input();
+    if (buttons == 2) break;
     delay(50000);
   }
 
-  setup_intro_tiles(15, 30); 
-  delay(50000);
+  if (buttons != 2) {
+    setup_intro_tiles(15, 30); 
+    delay(50000);
 
-  // Place the pac-dot
-  vid_set_tile(5,25, 28);
-  vid_set_sprite_pos(PACMAN, 200, 196);
-  vid_set_image_for_sprite(PACMAN, PACMAN_LEFT);
-  vid_enable_sprite(PACMAN, 1);
+    // Place the pac-dot
+    vid_set_tile(5,25, 28);
+    vid_set_sprite_pos(PACMAN, 200, 196);
+    vid_set_image_for_sprite(PACMAN, PACMAN_LEFT);
+    vid_enable_sprite(PACMAN, 1);
 
-  for(int i=0; i<NUM_GHOSTS; i++) {
-    vid_set_sprite_pos(i+1, 224 + i*24, 196);
-    vid_enable_sprite(i+1, 1);
-  }
-
-  for(int i=0; i<11; i++) {
-    vid_set_sprite_pos(PACMAN, 200 - i * 16, 196);
-    vid_set_image_for_sprite(PACMAN, (i &1 ? PACMAN_LEFT : PACMAN_ROUND));
-    
-    for(int j=0; j<NUM_GHOSTS; j++) {
-      vid_set_sprite_pos(j+1, 224 + j*24 - i * 16, 196);
+    for(int i=0; i<NUM_GHOSTS; i++) {
+      vid_set_sprite_pos(i+1, 224 + i*24, 196);
+      vid_enable_sprite(i+1, 1);
     }
 
-    delay(10000);
+    for(int i=0; i<11; i++) {
+      vid_set_sprite_pos(PACMAN, 200 - i * 16, 196);
+      vid_set_image_for_sprite(PACMAN, (i &1 ? PACMAN_LEFT : PACMAN_ROUND));
+    
+      for(int j=0; j<NUM_GHOSTS; j++) {
+        vid_set_sprite_pos(j+1, 224 + j*24 - i * 16, 196);
+      }
+      get_input();
+      if (buttons == 2) break;
+
+      delay(10000);
+    }
+    
+    if (buttons != 2) delay(200000);
   }
  
-  delay(200000);
  
-  for(int i=0;i<NUM_GHOSTS;i++) vid_enable_sprite(i+1, 0);
+  for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
   clear_screen();
+}
+
+// Show the start screen
+void show_start_screen() {
+  // Set up the scree
+  clear_screen();
+  setup_startscreen();
+
+  show_score(START_HI_SCORE_X, START_HI_SCORE_Y, hi_score);
+ 
+  show_score(START_1UP_SCORE_X, START_1UP_SCORE_Y, score);
+
+  show_score(START_2UP_SCORE_X, START_2UP_SCORE_Y, 0);
+ 
+  num_players = 1;
+
+  for(int i = 0; i < 1000; i++) {
+    if (i < 240) vid_set_y_ofs(i);
+
+    get_input();
+
+    if (buttons == 1) {
+      vid_set_tile(13, 30 + 13 + num_players*2, 0);  
+      num_players = (num_players == 1 ? 2 : 1);
+      vid_set_tile(13, 30 + 13 + num_players*2,28);  
+      delay(20000);
+    }
+
+    if (buttons == 2) break;
+
+    delay(100);
+  }
+
+  clear_screen();
+
+  if (buttons != 2) show_intro_screen();
+}
+
+void new_game() {
+  // Start a new life
+  game_start = tick_counter;
+  num_lives--;
+  ghost_speed = (stage < 16 ? 16 - stage : 0);
+  ghost_speed_counter = 0;
+  // Start Blinky immediately
+  ghost_active[BLINKY-1] = true;
+  chomp = true; // Start with open mouth image
+  game_over = false;
+  life_over = false;
+  num_fruit = (stage <= 7 ? stage : 7);
+  fruit_counter = 0;
+  skip_ticks = 0;
 }
 
 // Main entry point
@@ -914,13 +1007,14 @@ void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
   set_irq_mask(0x00);
 
+  // Initialize the Nunchuk
+  i2c_send_cmd(0x40, 0x00);
+
   // Default high score
   hi_score = 10000;
   score = 0;
 
   show_start_screen();
-
-  show_intro_screen();
 
   setup_screen();
  
@@ -942,21 +1036,24 @@ void main() {
   // (the music routine runs from the timer interrupt)
   set_timer_counter(counter_frequency);
 
-  // Initialize the Nunchuk
-  i2c_send_cmd(0x40, 0x00);
-
   play = false;
-  auto_play = false;
+  auto_play = (buttons != 2);
 
   num_lives = 3;
   num_fruit = 1;
   stage = 1;
 
   skip_ticks = 0;
+  life_over = false;
 
   // Display the ready message
   show_ready();
   
+  if (auto_play) {
+    new_game();
+    remove_ready();
+  }
+
   uint32_t time_waster = 0;
 
   // Main loop
@@ -978,83 +1075,40 @@ void main() {
         vid_enable_sprite(PACMAN,1);
         set_ghost_eyes = 0;
       }
-
+     
       // Lost life animation
-      if (life_over && tick_counter - life_over_start == 2)
-        vid_set_image_for_sprite(PACMAN, PACMAN_UP);
-      else if (life_over && tick_counter - life_over_start == 4) 
-        vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE1);
-      else if (life_over && tick_counter - life_over_start == 6) 
-        vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE2);
-      else if (life_over && tick_counter - life_over_start == 12) {
-        vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
-        if (game_over) {
-          // Disable sprites
-          for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
-          clear_screen();
-          show_start_screen();
-          setup_screen();
-          setup_board();
-        } else {
-          reset_positions();
-          // Position the sprites to their home positions
-          for(int i=0;i<NUM_SPRITES;i++)
-            vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
-                                  8 + (sprite_y[i] << 4));
+      if (life_over) {
+        if (tick_counter - life_over_start == 2)
+          vid_set_image_for_sprite(PACMAN, PACMAN_UP);
+        else if (tick_counter - life_over_start == 4) 
+          vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE1);
+        else if (tick_counter - life_over_start == 6) 
+          vid_set_image_for_sprite(PACMAN, EXPLODE_IMAGE2);
+        else if (tick_counter - life_over_start == 12) {
+          vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
+          if (game_over) {
+            // Disable sprites
+            for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
+            clear_screen();
+            show_start_screen();
+            setup_screen();
+            setup_board();
+          } else {
+            reset_positions();
+            // Position the sprites to their home positions
+            for(int i=0;i<NUM_SPRITES;i++)
+              vid_set_sprite_pos(i, 8 + (sprite_x[i] << 4), 
+                                    8 + (sprite_y[i] << 4));
+          }
+
+          if (!auto_play) show_ready();
+          else new_game();
+
+          life_over = false;
         }
-        show_ready();
-        life_over = false;
       }
 
-      // Get Nunchuk data
-      i2c_send_reg(0x00);
-      delay(100);
-
-      uint8_t jx = i2c_read();
-#ifdef debug
-      print("Joystick x: ");
-      print_hex(jx, 2);
-      print("\n");
-#endif
-
-      uint8_t jy = i2c_read();
-#ifdef debug
-      print("Joystick y: ");
-      print_hex(jy, 2);
-      print("\n:1");
-#endif
-
-      uint8_t ax = i2c_read();
-#ifdef debug
-      print("Accel  x: ");
-      print_hex(ax, 2);
-      print("\n");
-#endif
-
-      uint8_t ay = i2c_read();
-#ifdef debug
-      print("Accel  y: ");
-      print_hex(ay, 2);
-      print("\n");
-#endif
-
-      uint8_t az = i2c_read();
-#ifdef debug
-      print("Accel  z: ");
-      print_hex(az, 2);
-      print("\n");
-#endif
-
-      uint8_t rest = i2c_read();
-#ifdef debug
-      print("Rest: ");
-      print_hex(rest,2);
-      print("\n");
-      print("Buttons: ");
-      print_hex(rest & 3, 2);
-      print("\n");
-#endif      
-      uint8_t buttons = rest & 3;
+      if (life_over) continue;
 
       // Save score
       old_score = score;
@@ -1075,9 +1129,6 @@ void main() {
 
       // Show the tick_counter since game start
       show_score(SCORE_X, SCORE_Y + 3, tick_counter - game_start);
-
-      // Show  number of lives
-      show_score(SCORE_X, SCORE_Y + 5, num_lives);
 #endif
 
       // Show fruit
@@ -1103,30 +1154,24 @@ void main() {
           num_lives = 3; // This is probably wrong
         }
       }
-      
+       
+      // Get controller input
+      get_input();
+      print("Buttons: ");
+      print_hex(buttons, 2);
+      print("\n");
+    
       // Check buttons for start or restart
       if (buttons < 3) { 
         if (buttons == 0 || buttons == 2) {
           auto_play = false;
           if (!play) {
             remove_ready();            
-            // Start a new life
-            game_start = tick_counter;
-            num_lives--;
-            ghost_speed = (stage < 16 ? 16 - stage : 0);
-            ghost_speed_counter = 0;
-            // Start Blinky immediately
-            ghost_active[BLINKY-1] = true;
-            chomp = true; // Start with open mouth image
-            game_over = false;
-            life_over = false;
-            num_fruit = (stage <= 7 ? stage : 7);
-            fruit_counter = 0;
+            new_game();
           }
           play = true;
         } else { // Auto play
-          setup_screen();
-          setup_board();
+          new_game();
           auto_play = true;
           play = false;
         }
