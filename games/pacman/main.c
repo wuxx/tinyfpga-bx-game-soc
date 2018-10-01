@@ -11,7 +11,7 @@
 #include "graphics_data.h"
 
 //#define debug 1
-#define diag 1
+//#define diag 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -1091,6 +1091,7 @@ void main() {
 
   // Play music
   songplayer_init(&song_pacman);
+  songplayer_start(0);
 
   // switch to dual IO mode
 
@@ -1145,6 +1146,7 @@ void main() {
             show_start_screen();
             setup_screen();
             setup_board();
+            songplayer_start(0);
           } else {
             reset_positions();
             // Position the sprites to their home positions
@@ -1226,6 +1228,7 @@ void main() {
             new_life();
           }
           play = true;
+          songplayer_stop();
         }
       }
 
@@ -1329,7 +1332,8 @@ void main() {
               game_over = true;
               score_1up = score;
               show_game_over();
-            } 
+            }
+            songplayer_trigger_effect(8);
             life_over = true;
             // Set the ghosts inactive
             for(int i=0;i<NUM_GHOSTS;i++) ghost_active[i] = false;
@@ -1370,7 +1374,10 @@ void main() {
                   ( n & FRUIT ? (stage == 1 ? CHERRY_POINTS : 
                                 (stage == 2 ? STRAWBERRY_POINTS : ORANGE_POINTS)) : FOOD_POINTS));
          board[sprite_y[PACMAN]][sprite_x[PACMAN]] &= ~(FOOD | BIG_FOOD | FRUIT);
-         
+         if (n & BIG_FOOD) {
+           songplayer_trigger_effect(9);  /* trigger eat pill sound effect */
+         }
+ 
          if (n & BIG_FOOD && !hunting) {
            hunting = 1;
            kills = 0;
