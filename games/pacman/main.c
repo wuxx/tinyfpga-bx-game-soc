@@ -1376,6 +1376,8 @@ void main() {
          board[sprite_y[PACMAN]][sprite_x[PACMAN]] &= ~(FOOD | BIG_FOOD | FRUIT);
          if (n & BIG_FOOD) {
            songplayer_trigger_effect(9);  /* trigger eat pill sound effect */
+         } else if (n & FOOD) {
+           songplayer_trigger_effect(10);  /* trigger waka waka noise */
          }
  
          if (n & BIG_FOOD && !hunting) {
