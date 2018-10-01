@@ -239,13 +239,15 @@ uint8_t old_sprite_x[NUM_SPRITES], old_sprite_y[NUM_SPRITES];
 uint8_t old2_sprite_x[NUM_SPRITES], old2_sprite_y[NUM_SPRITES];
 bool ghost_eyes[NUM_GHOSTS];
 bool ghost_active[NUM_GHOSTS];
-uint16_t score, hi_score, old_score, food_items, ghost_points;
+uint16_t score, hi_score, old_score, score_1up, score_2up;
+uint16_t food_items, ghost_points;
 uint16_t ghost_speed_counter, ghost_speed, fruit_counter;
 uint8_t stage, direction, hunting, num_fruit, num_lives, kills, set_ghost_eyes;
-uint32_t tick_counter, game_start, hunt_start, stage_over_start, skip_ticks, life_over_start;
+uint32_t tick_counter, game_start, hunt_start, stage_over_start, 
+         skip_ticks, life_over_start;
 bool play, chomp, game_over, life_over, new_stage;
 bool auto_play;
-uint8_t buttons, jx, jy, num_players, rand;
+uint8_t buttons, jx, jy, num_players;
 
 // Set the IRQ mask
 uint32_t set_irq_mask(uint32_t mask); asm (
@@ -433,11 +435,10 @@ void print_board() {
 }  
 #endif
 
-// Reset sprites to their original positions, and reset other state data
+// Reset sprites to their original positions
 void reset_positions() {
   sprite_x[PACMAN] = 7;
   sprite_y[PACMAN] = 11;
-  direction = RIGHT;
 
   sprite_x[BLINKY] = 7;
   sprite_y[BLINKY] = 7;
@@ -450,9 +451,6 @@ void reset_positions() {
 
   sprite_x[CLYDE] = 8;
   sprite_y[CLYDE] = 10;
-
-  hunting = 0;
-  new_stage = false;
 }
 
 // Add fruit to the board
@@ -470,10 +468,7 @@ void add_fruit(uint8_t x, uint8_t y) {
 
 // Set ghosts to their initial colours
 void set_ghost_colours() {
-  vid_set_sprite_colour(INKY, CYAN);
-  vid_set_sprite_colour(PINKY, MAGENTA);
-  vid_set_sprite_colour(BLINKY, RED);
-  vid_set_sprite_colour(CLYDE, GREEN);
+  for(int i=0;i<NUM_GHOSTS;i++) vid_set_sprite_colour(i+1, ghost_colour[i]);
 }
 
 void set_board_colour(uint8_t color) {
@@ -576,10 +571,14 @@ void show_fruit() {
     if (i == 1) tile = STRAWBERRY_TILE;
     else if (i >= 2) tile = ORANGE_TILE;
 
-    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y, (i >= num_fruit ? BLANK_TILE : tile));
-    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y, (i >= num_fruit ? BLANK_TILE : tile + 1));
-    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y + 1, (i >= num_fruit ? BLANK_TILE : tile + 8));
-    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y + 1, (i >= num_fruit ? BLANK_TILE : tile + 9));
+    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y, 
+                 (i >= num_fruit ? BLANK_TILE : tile));
+    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y, 
+                 (i >= num_fruit ? BLANK_TILE : tile + 1));
+    vid_set_tile(SHOW_FRUIT_X + i*2, SHOW_FRUIT_Y + 1, 
+                 (i >= num_fruit ? BLANK_TILE : tile + 8));
+    vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y + 1, 
+                 (i >= num_fruit ? BLANK_TILE : tile + 9));
   }
 }
 
@@ -594,10 +593,14 @@ void show_big_tile(uint8_t x, uint8_t y, uint8_t t1, uint8_t t2,
 // Display available lives
 void show_lives() {
   for(int i=0;i<4;i++) {
-    vid_set_tile(LIVES_X + i*2, LIVES_Y, (i < num_lives ? PACMAN_TILE : BLANK_TILE));
-    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y, (i < num_lives ? PACMAN_TILE+1 : BLANK_TILE));
-    vid_set_tile(LIVES_X + i*2, LIVES_Y + 1, (i < num_lives ? PACMAN_TILE+8 : BLANK_TILE));
-    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y + 1, (i < num_lives ? PACMAN_TILE+9 : BLANK_TILE));
+    vid_set_tile(LIVES_X + i*2, LIVES_Y, 
+                 (i < num_lives ? PACMAN_TILE : BLANK_TILE));
+    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y, 
+                 (i < num_lives ? PACMAN_TILE+1 : BLANK_TILE));
+    vid_set_tile(LIVES_X + i*2, LIVES_Y + 1, 
+                 (i < num_lives ? PACMAN_TILE+8 : BLANK_TILE));
+    vid_set_tile(LIVES_X + 1 + i*2, LIVES_Y + 1, 
+                  (i < num_lives ? PACMAN_TILE+9 : BLANK_TILE));
   }
 }
 
@@ -658,14 +661,20 @@ void chase(uint8_t target_x, uint8_t target_y, uint8_t* x, uint8_t* y,
   print_hex(target_y,4);
   print("\n");
 #endif
+
+  // Try to get nearer the target, if not avoid last square, if not, any valid move
   if (target_x < *x && (n & CAN_GO_LEFT) && (*x)-1 != avoid_x) (*x)--;
   else if (target_x > *x && (n & CAN_GO_RIGHT) && (*x)+1 != avoid_x) (*x)++;
-  else if (target_y < *y && (n & CAN_GO_UP) && (*y)-1 != avoid_y) (*y)--;
   else if (target_y > *y && (n & CAN_GO_DOWN) && (*y)+1 != avoid_y) (*y)++;
+  else if (target_y < *y && (n & CAN_GO_UP) && (*y)-1 != avoid_y) (*y)--;
+  else if (n & CAN_GO_LEFT && (*x)-1 != avoid_x) (*x)--;
+  else if (n & CAN_GO_RIGHT && (*x)+1 != avoid_x) (*x)++;
+  else if (n & CAN_GO_DOWN && (*y)+1 != avoid_y) (*y)++;
+  else if (n & CAN_GO_UP && (*y)-1 != avoid_y) (*y)--;
   else if (n & CAN_GO_LEFT) (*x)--;
   else if (n & CAN_GO_RIGHT) (*x)++;
-  else if (n & CAN_GO_DOWN) (*y)--;
-  else if (n & CAN_GO_UP) (*y)++;
+  else if (n & CAN_GO_DOWN) (*y)++;
+  else if (n & CAN_GO_UP) (*y)--;
 }
 
 // Evade a sprite or go away from a target
@@ -723,13 +732,16 @@ void move_ghost(uint8_t g) {
     ty = 7;
 
     if (sprite_x[g] == 7 && sprite_y[g] == 7) {
-      sprite_x[g] = 8;
-      ghost_eyes[g-1] = false;
+      sprite_y[g] = 9;
       vid_set_image_for_sprite(g, GHOST_IMAGE);
       vid_set_sprite_colour(g, ghost_colour[g-1]);
       return;
+    } else if (sprite_x[g] == 7 && sprite_y[g] == 9) {
+      sprite_y[g] = 8;
+      return;
     } else if (sprite_x[g] == 7 && sprite_y[g] == 8) {
-      sprite_y[g] = 9;
+      ghost_eyes[g-1] = false;
+      sprite_y[g] = 7;
       return;
     }
   }
@@ -745,7 +757,8 @@ void move_ghost(uint8_t g) {
 
 // Test is square is occupied by ghost
 bool ghost_square(uint8_t x, uint8_t y) {
-  for(int i=0;i<NUM_GHOSTS;i++) if (x == sprite_x[i+1] && y == sprite_y[i+1]) return true;
+  for(int i=0;i<NUM_GHOSTS;i++) 
+    if (x == sprite_x[i+1] && y == sprite_y[i+1]) return true;
   return false;
 }
 
@@ -785,10 +798,14 @@ void move_pacman() {
 #endif
   // If there is more than one direction, pick one with food and then remove one at random
   if (num > 1) {
-    if ((valid & CAN_GO_UP) && !(board[y-1][x] & (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_UP;
-    if ((valid & CAN_GO_DOWN) && !(board[y+1][x] & (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_DOWN;
-    if ((valid & CAN_GO_LEFT) && !(board[y][x-1] & (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_LEFT;
-    if ((valid & CAN_GO_RIGHT) && !(board[y][x+1] & (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_RIGHT;
+    if ((valid & CAN_GO_UP) && !(board[y-1][x] & 
+         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_UP;
+    if ((valid & CAN_GO_DOWN) && !(board[y+1][x] & 
+         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_DOWN;
+    if ((valid & CAN_GO_LEFT) && !(board[y][x-1] & 
+         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_LEFT;
+    if ((valid & CAN_GO_RIGHT) && !(board[y][x+1] & 
+         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_RIGHT;
   }
 #ifdef debug
   print("Valid moves with food");
@@ -813,11 +830,6 @@ void move_pacman() {
           bit << 1;
           mask = (mask ^ bit) << 1;
         }
-#ifdef debug
-        print("Valid moves random ");
-        print_hex(valid,2);
-        print("\n");
-#endif
       }
     }
   } 
@@ -899,7 +911,6 @@ void get_input() {
 #endif
 
   uint8_t ax = i2c_read();
-  rand = ax & 1;
 
   uint8_t ay = i2c_read();
 
@@ -912,6 +923,25 @@ void get_input() {
   print("\n");
 #endif      
   buttons = rest & 3;
+}
+
+void disable_sprites() {
+  for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
+}
+
+// Start a new game from stage 1
+void start_game() {
+  stage = 1;
+  num_lives = 3;
+  score = 0;
+
+  play = false;
+
+  skip_ticks = 0;
+  life_over = false;
+  
+  setup_screen();
+  setup_board();
 }
 
 // Show the intro screen
@@ -928,9 +958,9 @@ void show_intro_screen() {
 
   show_score(INTRO_HI_SCORE_X, INTRO_HI_SCORE_Y, hi_score);
  
-  show_score(INTRO_1UP_SCORE_X, INTRO_1UP_SCORE_Y, score);
+  show_score(INTRO_1UP_SCORE_X, INTRO_1UP_SCORE_Y, score_1up);
 
-  show_score(INTRO_2UP_SCORE_X, INTRO_2UP_SCORE_Y, 0);
+  show_score(INTRO_2UP_SCORE_X, INTRO_2UP_SCORE_Y, score_2up);
 
   delay(50000);
  
@@ -974,9 +1004,11 @@ void show_intro_screen() {
     if (buttons != 2) delay(200000);
   }
  
- 
-  for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
+  disable_sprites(); 
   clear_screen();
+
+  start_game();    
+  auto_play = (buttons != 2);
 }
 
 // Show the start screen
@@ -987,9 +1019,9 @@ void show_start_screen() {
 
   show_score(START_HI_SCORE_X, START_HI_SCORE_Y, hi_score);
  
-  show_score(START_1UP_SCORE_X, START_1UP_SCORE_Y, score);
+  show_score(START_1UP_SCORE_X, START_1UP_SCORE_Y, score_1up);
 
-  show_score(START_2UP_SCORE_X, START_2UP_SCORE_Y, 0);
+  show_score(START_2UP_SCORE_X, START_2UP_SCORE_Y, score_2up);
  
   num_players = 1;
 
@@ -1013,6 +1045,10 @@ void show_start_screen() {
   clear_screen();
 
   if (buttons != 2) show_intro_screen();
+  else {
+    start_game();
+    auto_play = false;
+  }
 }
 
 void new_life() {
@@ -1029,6 +1065,10 @@ void new_life() {
   num_fruit = (stage <= 7 ? stage : 7);
   fruit_counter = 0;
   skip_ticks = 0;
+
+  hunting = 0;
+  new_stage = false;
+  direction = RIGHT;
 }
 
 // Main entry point
@@ -1041,14 +1081,9 @@ void main() {
 
   // Default high score
   hi_score = 10000;
-  score = 0;
+  score_1up = 0;
 
   show_start_screen();
-
-  setup_screen();
- 
-  // Set up the board
-  setup_board();
 
 #ifdef debug
   print_board();
@@ -1065,23 +1100,11 @@ void main() {
   // (the music routine runs from the timer interrupt)
   set_timer_counter(counter_frequency);
 
-  play = false;
-  auto_play = (buttons != 2);
 
-  num_lives = 3;
-  num_fruit = 1;
-  stage = 1;
-
-  skip_ticks = 0;
-  life_over = false;
-
-  // Display the ready message
-  show_ready();
-  
+  // Display the ready message, unless auto_play
   if (auto_play) {
     new_life();
-    remove_ready();
-  }
+  } else show_ready();
 
   uint32_t time_waster = 0;
 
@@ -1117,7 +1140,7 @@ void main() {
           vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
           if (game_over) {
             // Disable sprites
-            for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i, 0);
+            disable_sprites();
             clear_screen();
             show_start_screen();
             setup_screen();
@@ -1189,6 +1212,13 @@ void main() {
     
       // Check buttons for start or restart
       if (buttons < 3) { 
+        if (auto_play) {
+          auto_play = false;
+          new_life();
+          disable_sprites();
+          show_start_screen();
+          continue;
+        }
         if (buttons == 0 || buttons == 2) {
           auto_play = false;
           if (!play) {
@@ -1196,10 +1226,6 @@ void main() {
             new_life();
           }
           play = true;
-        } else { // Auto play
-          new_life();
-          auto_play = true;
-          play = false;
         }
       }
 
@@ -1301,10 +1327,7 @@ void main() {
             if (num_lives == 0) {
               // Game over
               game_over = true;
-              stage = 1;
-              score = 0;
-              // Reset lives and fruit
-              num_lives = 3;
+              score_1up = score;
               show_game_over();
             } 
             life_over = true;
@@ -1387,7 +1410,7 @@ void main() {
         new_stage = true;
         stage++;
         play = false;
-        for(int i=0;i<NUM_SPRITES;i++) vid_enable_sprite(i,0);
+        disable_sprites();
       }
 
       // Flash 1UP and power pills
