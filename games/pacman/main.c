@@ -94,17 +94,20 @@ extern const struct song_t song_pacman;
 #define GHOST_OUT_X 7
 #define GHOST_OUT_Y 7
 
-#define PINKY_HOME_X 6
-#define PINKY_HOME_Y 9
+#define PACMAN_HOME_X 7
+#define PACMAN_HOME_Y 11
+
+#define BLINKY_HOME_X 7
+#define BLINKY_HOME_Y 7
 
 #define INKY_HOME_X 7
-#define INKY_HOME_Y 9
+#define INKY_HOME_Y 10
 
 #define CLYDE_HOME_X 8
-#define CLYDE_HOME_Y 9
+#define CLYDE_HOME_Y 10
 
 #define PINKY_HOME_X 6
-#define PINKY_HOME_Y 9
+#define PINKY_HOME_Y 10
 
 #define POWER_PILL1_X 0
 #define POWER_PILL1_Y 1
@@ -224,9 +227,18 @@ extern const struct song_t song_pacman;
 #define CLYDE 4 
 #define READY 5
 
+// Target for Clyde when not chasing Pacman
+
+#define CLYDE_TARGET_X 0
+#define CLYDE_TARGET_Y 13
+
 const uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
 
 const uint8_t  ghost_colour[] = {CYAN, MAGENTA, RED, GREEN};
+const uint8_t power_pill_x[] = {POWER_PILL1_X, POWER_PILL2_X, 
+                                POWER_PILL3_X, POWER_PILL4_X};
+const uint8_t power_pill_y[] = {POWER_PILL1_Y, POWER_PILL2_Y, 
+                                POWER_PILL3_Y, POWER_PILL4_Y};
  
 // Working data
 uint8_t board[BOARD_HEIGHT][BOARD_WIDTH];
@@ -425,8 +437,8 @@ void show_board() {
 // Diagnostic print of board
 void print_board() {
   print("Board:\n");
-  for(int y = 0; y < 14; y++) {
-    for(int x = 0; x < 15; x++) {
+  for(int y = 0; y < BOARD_HEIGHT; y++) {
+    for(int x = 0; x < BOARD_WIDTH; x++) {
       print_hex(board[y][x],2);
       print(" ");
     }
@@ -437,20 +449,29 @@ void print_board() {
 
 // Reset sprites to their original positions
 void reset_positions() {
-  sprite_x[PACMAN] = 7;
-  sprite_y[PACMAN] = 11;
+  sprite_x[PACMAN] = PACMAN_HOME_X;
+  sprite_y[PACMAN] = PACMAN_HOME_Y;
 
-  sprite_x[BLINKY] = 7;
-  sprite_y[BLINKY] = 7;
+  sprite_x[BLINKY] = BLINKY_HOME_X;
+  sprite_y[BLINKY] = BLINKY_HOME_Y;
 
-  sprite_x[PINKY] = 6;
-  sprite_y[PINKY] = 10;
+  sprite_x[PINKY] = PINKY_HOME_X;
+  sprite_y[PINKY] = PINKY_HOME_Y;
 
-  sprite_x[INKY] = 7;
-  sprite_y[INKY] = 10;
+  sprite_x[INKY] = INKY_HOME_X;
+  sprite_y[INKY] = INKY_HOME_Y;
 
-  sprite_x[CLYDE] = 8;
-  sprite_y[CLYDE] = 10;
+  sprite_x[CLYDE] = CLYDE_HOME_X;
+  sprite_y[CLYDE] = CLYDE_HOME_Y;
+}
+
+// Display a 4x4 tile
+void show_big_tile(uint8_t x, uint8_t y, uint8_t t1, uint8_t t2, 
+                                         uint8_t t3, uint8_t t4) {
+  vid_set_tile(2*x+1, 2*y+1, t1);
+  vid_set_tile(2*x+2, 2*y+1, t2);
+  vid_set_tile(2*x+1, 2*y+2, t3);
+  vid_set_tile(2*x+2, 2*y+2, t4);
 }
 
 // Add fruit to the board
@@ -460,10 +481,8 @@ void add_fruit(uint8_t x, uint8_t y) {
   food_items++;
   uint8_t fruit_tile = (stage == 1 ?  CHERRY_TILE : 
                         stage == 2 ? STRAWBERRY_TILE : ORANGE_TILE);
-  vid_set_tile(2*x + 1,2*y + 1, fruit_tile);
-  vid_set_tile(2*x + 2,2*y + 1, fruit_tile+1);
-  vid_set_tile(2*x + 1,2*y + 2, fruit_tile+8);
-  vid_set_tile(2*x + 2,2*y + 2, fruit_tile+9);
+
+  show_big_tile(x,y, fruit_tile, fruit_tile+1, fruit_tile+8, fruit_tile+9);
 }
 
 // Set ghosts to their initial colours
@@ -580,14 +599,6 @@ void show_fruit() {
     vid_set_tile(SHOW_FRUIT_X + 1 + i*2, SHOW_FRUIT_Y + 1, 
                  (i >= num_fruit ? BLANK_TILE : tile + 9));
   }
-}
-
-void show_big_tile(uint8_t x, uint8_t y, uint8_t t1, uint8_t t2, 
-                                         uint8_t t3, uint8_t t4) {
-  vid_set_tile(2*x+1, 2*y+1, t1);
-  vid_set_tile(2*x+2, 2*y+1, t2);
-  vid_set_tile(2*x+1, 2*y+2, t3);
-  vid_set_tile(2*x+2, 2*y+2, t4);
 }
 
 // Display available lives
@@ -719,8 +730,8 @@ void move_ghost(uint8_t g) {
     } else if (g == CLYDE) {
       if (abs(sprite_x[g] - tx) < 2 ||
           abs(sprite_y[g] - ty) < 2) {
-        tx = 0;
-        ty = 13;
+        tx = CLYDE_TARGET_X;
+        ty = CLYDE_TARGET_Y;
       }
     } else if (g == INKY) {
       if (tick_counter & 0x100) chasing = false;
@@ -728,20 +739,20 @@ void move_ghost(uint8_t g) {
   }
 
   if (ghost_eyes[g-1]) {
-    tx = 7;
-    ty = 7;
+    tx = GHOST_OUT_X;
+    ty = GHOST_OUT_Y;
 
-    if (sprite_x[g] == 7 && sprite_y[g] == 7) {
+    if (sprite_x[g] == GHOST_OUT_X && sprite_y[g] == GHOST_OUT_Y) {
       sprite_y[g] = 9;
       vid_set_image_for_sprite(g, GHOST_IMAGE);
       vid_set_sprite_colour(g, ghost_colour[g-1]);
       return;
-    } else if (sprite_x[g] == 7 && sprite_y[g] == 9) {
-      sprite_y[g] = 8;
+    } else if (sprite_x[g] == GHOST_OUT_X && sprite_y[g] == GHOST_OUT_Y + 2) {
+      sprite_y[g] = GHOST_OUT_Y + 1;
       return;
-    } else if (sprite_x[g] == 7 && sprite_y[g] == 8) {
+    } else if (sprite_x[g] == GHOST_OUT_X && sprite_y[g] == GHOST_OUT_Y + 1) {
       ghost_eyes[g-1] = false;
-      sprite_y[g] = 7;
+      sprite_y[g] = GHOST_OUT_Y;
       return;
     }
   }
@@ -917,12 +928,10 @@ void get_input() {
 #endif
 
   uint8_t ax = i2c_read();
-
   uint8_t ay = i2c_read();
-
   uint8_t az = i2c_read();
-
   uint8_t rest = i2c_read();
+
 #ifdef debug
   print("Buttons: ");
   print_hex(rest & 3, 2);
@@ -1088,6 +1097,7 @@ void main() {
   // Default high score
   hi_score = 10000;
   score_1up = 0;
+  score_2up = 0;
 
   show_start_screen();
 
@@ -1288,22 +1298,22 @@ void main() {
       // Is it time to let Pinky out?
       if (tick_counter >= (game_start + PINKY_START) && !ghost_active[PINKY-1]) {
         ghost_active[PINKY-1] = true;
-        sprite_x[PINKY] = 7;
-        sprite_y[PINKY] = 7;
+        sprite_x[PINKY] = GHOST_OUT_X;
+        sprite_y[PINKY] = GHOST_OUT_Y;
       } 
 
       // What about Inky?
       if (tick_counter >= (game_start + INKY_START) && !ghost_active[INKY-1]) {
         ghost_active[INKY-1] = true;
-        sprite_x[INKY] = 7;
-        sprite_y[INKY] = 7;
+        sprite_x[INKY] = GHOST_OUT_X;
+        sprite_y[INKY] = GHOST_OUT_Y;
       }
 
       // What about Clyde?
       if (tick_counter >= (game_start + CLYDE_START) && !ghost_active[CLYDE-1]) {
         ghost_active[CLYDE-1] = true;
-        sprite_x[CLYDE] = 7;
-        sprite_y[CLYDE] = 7;
+        sprite_x[CLYDE] = GHOST_OUT_X;
+        sprite_y[CLYDE] = GHOST_OUT_Y;
       }
 
       // Move ghosts
@@ -1337,7 +1347,9 @@ void main() {
             if (num_lives == 0) {
               // Game over
               game_over = true;
-              score_1up = score;
+              // Put the auto-play score in 2UP
+              if (auto_play) score_2up = score;
+              else score_1up = score;
               show_game_over();
             }
             songplayer_trigger_effect(8);
@@ -1372,14 +1384,13 @@ void main() {
          if (n & FOOD | n & BIG_FOOD) food_items--;
          if (n & FRUIT) food_items--;
 
-         vid_set_tile(sprite_x[PACMAN]*2 + 1, sprite_y[PACMAN]*2 + 1, BLANK_TILE);
-         vid_set_tile(sprite_x[PACMAN]*2 + 2, sprite_y[PACMAN]*2 + 1, BLANK_TILE);
-         vid_set_tile(sprite_x[PACMAN]*2 + 1, sprite_y[PACMAN]*2 + 2, BLANK_TILE);
-         vid_set_tile(sprite_x[PACMAN]*2 + 2, sprite_y[PACMAN]*2 + 2, BLANK_TILE);
+         show_big_tile(sprite_x[PACMAN], sprite_y[PACMAN], 
+                       BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
 
          score += (n & BIG_FOOD ? BIG_FOOD_POINTS : 
                   ( n & FRUIT ? (stage == 1 ? CHERRY_POINTS : 
-                                (stage == 2 ? STRAWBERRY_POINTS : ORANGE_POINTS)) : FOOD_POINTS));
+                                (stage == 2 ? STRAWBERRY_POINTS : 
+                                              ORANGE_POINTS)) : FOOD_POINTS));
          board[sprite_y[PACMAN]][sprite_x[PACMAN]] &= ~(FOOD | BIG_FOOD | FRUIT);
          if (n & (BIG_FOOD | FRUIT)) {
            songplayer_trigger_effect(9);  /* trigger eat pill sound effect */
@@ -1436,28 +1447,16 @@ void main() {
       // Flash 1UP and power pills
       if ((tick_counter & 1) == 1) {
         show_1up();
-        if (board[POWER_PILL1_Y][POWER_PILL1_X] & BIG_FOOD) 
-          show_big_tile(POWER_PILL1_X, POWER_PILL1_Y, 
-                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
-        if (board[POWER_PILL2_Y][POWER_PILL2_X] & BIG_FOOD) 
-          show_big_tile(POWER_PILL2_X, POWER_PILL2_Y, 
-                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
-        if (board[POWER_PILL3_Y][POWER_PILL3_X] & BIG_FOOD) 
-          show_big_tile(POWER_PILL3_X, POWER_PILL3_Y, 
-                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
-        if (board[POWER_PILL4_Y][POWER_PILL4_X] & BIG_FOOD) 
-          show_big_tile(POWER_PILL4_X, POWER_PILL4_Y, 
-                        POWER_PILL_TILE1, POWER_PILL_TILE2, POWER_PILL_TILE3, POWER_PILL_TILE4);
+        for(int i=0;i<4;i++) 
+          if (board[power_pill_y[i]][power_pill_x[i]] & BIG_FOOD) 
+            show_big_tile(power_pill_x[i], power_pill_y[i], 
+                          POWER_PILL_TILE1, POWER_PILL_TILE2, 
+                          POWER_PILL_TILE3, POWER_PILL_TILE4);
       } else {
         for(int i=0;i<3;i++) vid_set_tile(32+i, 7, BLANK_TILE);
-        show_big_tile(POWER_PILL1_X, POWER_PILL1_Y, 
-                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
-        show_big_tile(POWER_PILL2_X, POWER_PILL2_Y, 
-                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
-        show_big_tile(POWER_PILL3_X, POWER_PILL3_Y, 
-                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
-        show_big_tile(POWER_PILL4_X, POWER_PILL4_Y, 
-                      BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
+        for(int i=0;i<4;i++) 
+          show_big_tile(power_pill_x[i], power_pill_y[i], 
+                        BLANK_TILE, BLANK_TILE, BLANK_TILE, BLANK_TILE);
       }
     }
   }
