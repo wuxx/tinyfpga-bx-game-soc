@@ -711,10 +711,10 @@ void move_ghost(uint8_t g) {
   if (hunting == 0 && !ghost_eyes[g-1]) {
     if (g == PINKY) {
       switch (direction) {
-        case UP: ty-2; break;
-        case DOWN: ty+2; break;
-        case LEFT: tx-2; break;
-        case RIGHT: tx+2; break;
+        case UP: ty -= 2; break;
+        case DOWN: ty += 2; break;
+        case LEFT: tx -= 2; break;
+        case RIGHT: tx += 2; break;
       }
     } else if (g == CLYDE) {
       if (abs(sprite_x[g] - tx) < 2 ||
@@ -885,9 +885,6 @@ void end_hunt() {
     vid_set_image_for_sprite(i+1, GHOST_IMAGE);
     ghost_eyes[i] = false; 
   } 
-
-  // Let blinky out again 
-  if (sprite_x[BLINKY] == 7 && sprite_y[BLINKY] == 8) sprite_y[BLINKY] = 7;
 }
 
 void show_1up() {
@@ -1289,23 +1286,21 @@ void main() {
                                  TILE_SIZE + (sprite_y[PACMAN] << 4));
 
       // Is it time to let Pinky out?
-      if (tick_counter == (game_start + PINKY_START)) {
-        sprite_x[PINKY] = 7;
-        sprite_y[PINKY] = 8;
-      } else if (tick_counter == (game_start + PINKY_START+1)) {
-        sprite_y[PINKY] = 7;
+      if (tick_counter >= (game_start + PINKY_START) && !ghost_active[PINKY-1]) {
         ghost_active[PINKY-1] = true;
-      }
+        sprite_x[PINKY] = 7;
+        sprite_y[PINKY] = 7;
+      } 
 
       // What about Inky?
-      if (tick_counter == (game_start + INKY_START)) {
+      if (tick_counter >= (game_start + INKY_START) && !ghost_active[INKY-1]) {
         ghost_active[INKY-1] = true;
         sprite_x[INKY] = 7;
         sprite_y[INKY] = 7;
       }
 
       // What about Clyde?
-      if (tick_counter == (game_start + CLYDE_START)) {
+      if (tick_counter >= (game_start + CLYDE_START) && !ghost_active[CLYDE-1]) {
         ghost_active[CLYDE-1] = true;
         sprite_x[CLYDE] = 7;
         sprite_y[CLYDE] = 7;
@@ -1408,7 +1403,11 @@ void main() {
         hunt_start = tick_counter;
       } else if (hunting == 2 && (tick_counter - hunt_start) > HUNT_TICKS) { // End of white phase
         end_hunt();
-        if (sprite_x[BLINKY] == 7 && sprite_y[BLINKY] == 8) sprite_y[BLINKY] = 7;
+        // Let any docked ghosts out again 
+        for(int i=0;i<NUM_GHOSTS;i++) 
+          if (ghost_active[i] && sprite_x[i+1] == 7 &&
+              (sprite_y[i+1] == 8 || sprite_y[i+1] == 9))
+            sprite_y[i+1] = 7;
       }
 
       // Flash ghosts when hunting
