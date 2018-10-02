@@ -11,7 +11,7 @@
 #include "graphics_data.h"
 
 //#define debug 1
-//#define diag 1
+#define diag 1
 
 #define abs(x) ((x) < 0 ? -(x) : (x))
 
@@ -769,7 +769,7 @@ void move_pacman() {
   uint8_t y = sprite_y[PACMAN];
   uint8_t n = board[sprite_y[PACMAN]][sprite_x[PACMAN]];
 
-  // Find the valid moves
+  // Find the valid moves, that avoid ghosts (unless hunting)
   if  ((n & CAN_GO_UP) && (hunting > 0 || !ghost_square(x,y-1))) {
     valid |= CAN_GO_UP;
     num++;
@@ -790,51 +790,60 @@ void move_pacman() {
     num++;
   }
 
-  uint8_t save = valid;
-#ifdef debug
-  print("Valid moves ");
-  print_hex(valid,2);
-  print("\n");
-#endif
-  // If there is more than one direction, pick one with food and then remove one at random
+  uint8_t save = valid, save_num = num;
+  // If there is more than one direction, pick one with food 
   if (num > 1) {
     if ((valid & CAN_GO_UP) && !(board[y-1][x] & 
-         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_UP;
+         (FOOD | BIG_FOOD | FRUIT))) {
+      valid &= ~CAN_GO_UP;
+      num--;
+    }
     if ((valid & CAN_GO_DOWN) && !(board[y+1][x] & 
-         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_DOWN;
+         (FOOD | BIG_FOOD | FRUIT))) {
+      valid &= ~CAN_GO_DOWN;
+      num--;
+    }
     if ((valid & CAN_GO_LEFT) && !(board[y][x-1] & 
-         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_LEFT;
+         (FOOD | BIG_FOOD | FRUIT))) {
+      valid &= ~CAN_GO_LEFT;
+      num--;
+    }
     if ((valid & CAN_GO_RIGHT) && !(board[y][x+1] & 
-         (FOOD | BIG_FOOD | FRUIT))) valid &= ~CAN_GO_RIGHT;
+         (FOOD | BIG_FOOD | FRUIT))) {
+      valid &= ~CAN_GO_RIGHT;
+      num--;
+    }
   }
-#ifdef debug
-  print("Valid moves with food");
-  print_hex(valid,2);
-  print("\n");
-#endif 
-  if (valid == 0) {
-    valid = save;        
+
+ 
+  // If not one with food, avoid going back where you came from 
+  if (num == 0) {
+     valid = save;
+     num = save_num;
         
     if (num > 1) {     
       uint8_t ox = old2_sprite_x[PACMAN], oy = old2_sprite_y[PACMAN];
-      if ((valid & CAN_GO_UP) && x == ox && y-1 == oy) valid &= ~CAN_GO_UP;
-      if ((valid & CAN_GO_DOWN) && x == ox && y+1 == oy) valid &= ~CAN_GO_DOWN;
-      if ((valid & CAN_GO_LEFT) && x-1 == ox && y == oy) valid &= ~CAN_GO_LEFT;
-      if ((valid & CAN_GO_RIGHT) && x+1 == ox && y == oy) valid &= ~CAN_GO_RIGHT;
-
-      if (valid == 0) {
-        uint8_t bit = 1, mask = (tick_counter >> 3) & 1;
-        for (int i=0;num>1 && i<4;i++) {
-          if (valid & bit) valid &= ~mask;
-          if (!(valid & bit)) num--;
-          bit << 1;
-          mask = (mask ^ bit) << 1;
-        }
+      if ((valid & CAN_GO_UP) && x == ox && y-1 == oy) {
+        valid &= ~CAN_GO_UP;
+        num--;
+      }
+      if ((valid & CAN_GO_DOWN) && x == ox && y+1 == oy) {
+        valid &= ~CAN_GO_DOWN;
+        num--;
+      }
+      if ((valid & CAN_GO_LEFT) && x-1 == ox && y == oy) {
+        valid &= ~CAN_GO_LEFT;
+        num--;
+      }
+      if ((valid & CAN_GO_RIGHT) && x+1 == ox && y == oy) {
+        valid &= ~CAN_GO_RIGHT;
+        num--;
       }
     }
   } 
 
-  if (tick_counter & 2) {
+  // Slightly random directions
+  if ((tick_counter >> 5) & 1) {
     if (valid & CAN_GO_UP) {
       sprite_y[PACMAN]--; 
       direction=UP;
@@ -852,15 +861,15 @@ void move_pacman() {
     if (valid & CAN_GO_LEFT) {
       sprite_x[PACMAN]--; 
       direction=LEFT;
+    } else if (valid & CAN_GO_DOWN) {
+      sprite_y[PACMAN]++; 
+      direction=DOWN;
     } else if (valid & CAN_GO_UP) {
       sprite_y[PACMAN]--; 
       direction=UP;
     } else if (valid & CAN_GO_RIGHT) {
       sprite_x[PACMAN]++; 
       direction=RIGHT;
-    } else if (valid & CAN_GO_DOWN) {
-      sprite_y[PACMAN]++; 
-      direction=DOWN;
     }
   }
 }
@@ -1204,10 +1213,13 @@ void main() {
           set_board_colour(BLUE);
           setup_screen();
           setup_board();
-          show_ready();
+          if (!auto_play) show_ready();
+          else new_life();
           num_lives = 3; // This is probably wrong
         }
       }
+
+      if (new_stage) continue;
        
       // Get controller input
       get_input();
@@ -1374,7 +1386,7 @@ void main() {
                   ( n & FRUIT ? (stage == 1 ? CHERRY_POINTS : 
                                 (stage == 2 ? STRAWBERRY_POINTS : ORANGE_POINTS)) : FOOD_POINTS));
          board[sprite_y[PACMAN]][sprite_x[PACMAN]] &= ~(FOOD | BIG_FOOD | FRUIT);
-         if (n & BIG_FOOD) {
+         if (n & (BIG_FOOD | FRUIT)) {
            songplayer_trigger_effect(9);  /* trigger eat pill sound effect */
          } else if (n & FOOD) {
            songplayer_trigger_effect(10);  /* trigger waka waka noise */
@@ -1412,7 +1424,7 @@ void main() {
       if (score > hi_score) hi_score = score;
 
       // Check for stage won
-      if (play && food_items == 0) {
+      if (food_items == 0) {
         end_hunt();
         clear_board();
         stage_over_start = tick_counter;
