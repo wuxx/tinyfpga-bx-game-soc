@@ -888,8 +888,10 @@ void move_pacman() {
 // End the hunt
 void end_hunt() {
   hunting = 0;
+  set_ghost_eyes = 0;
   kills = 0;
   set_ghost_colours();
+  vid_enable_sprite(PACMAN, 1);
 
   for(int i=0;i<NUM_GHOSTS;i++) {
     vid_enable_sprite(i+1, 1);         
@@ -988,6 +990,7 @@ void show_intro_screen() {
     delay(50000);
   }
 
+
   if (buttons != 2) {
     setup_intro_tiles(15, 30); 
     delay(50000);
@@ -1016,8 +1019,40 @@ void show_intro_screen() {
       delay(10000);
     }
     
-    if (buttons != 2) delay(200000);
+    if (buttons != 2) {
+      delay(50000);
+  
+      // Remove the pac-dot
+      vid_set_tile(5,25,BLANK_TILE);
+      // Start hunting the ghosts
+      vid_set_image_for_sprite(PACMAN, PACMAN_RIGHT);
+      for(int i=0;i<NUM_GHOSTS;i++) vid_set_sprite_colour(i+1, BLUE);
+        
+      for (int i=1; i<9; i++) {
+        vid_set_sprite_pos(PACMAN, 40 + i*16, 196);
+        vid_set_image_for_sprite(PACMAN, PACMAN_ROUND + i&1);
+        for(int j=0;j<NUM_GHOSTS;j++) {
+          vid_set_sprite_pos(j+1, 64 + j*24 + i*4, 196);
+        }
+        if ((i & 1) == 0) {
+          uint8_t g = (i >> 1);
+          vid_enable_sprite(PACMAN,0);
+          vid_set_image_for_sprite(g, SCORE_IMAGE + g - 1);
+          vid_set_sprite_colour(g, WHITE);
+          delay(10000);
+          vid_enable_sprite(g, 0);
+          vid_enable_sprite(PACMAN, 1);
+        }
+        delay(20000);
+      }
+
+      get_input();
+      if (buttons != 2) delay(50000);
+    }
   }
+
+
+  delay(50000);
  
   disable_sprites(); 
   clear_screen();
