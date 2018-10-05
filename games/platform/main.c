@@ -6,6 +6,8 @@
 #include <songplayer/songplayer.h>
 #include <uart/uart.h>
 #include <sine_table/sine_table.h>
+#include <nunchuk/nunchuk.h>
+
 #include "graphics_data.h"
 
 // a pointer to this is a null pointer, but the compiler does not
@@ -15,6 +17,11 @@ extern uint32_t sram;
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
 #define reg_leds  (*(volatile uint32_t*)0x03000000)
+
+#define MAX_SPEED 16 
+#define GRAVITY 4
+#define JUMP_SPEED 24
+#define DEBOUNCE_TICKS 10
 
 #define BLANK_TILE 0
 #define ZERO_TILE 40
@@ -41,6 +48,7 @@ extern uint32_t sram;
 #define TIME_Y 1
 
 #define COINS_TILE 35
+#define COINS2_TILE 31
 
 #define X_TILE 53
 #define M_TILE 56
@@ -54,6 +62,10 @@ extern uint32_t sram;
 const struct song_t song_petergun;
 
 uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
+
+uint16_t score, coins;
+uint32_t game_start, time_left;
+uint8_t buttons, jx, jy;
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -73,9 +85,6 @@ uint32_t set_timer_counter(uint32_t val); asm (
 const uint8_t solid_tiles[] = {0x01, 0x02, 0x03, 0x04, 0x0A, 0x0B, 
                                0x10, 0x12, 0x18, 0x19, 
                                0x20, 0x21, 0x28, 0x29, 0x30, 0x31};
-
-uint16_t score, coins;
-uint32_t game_start, time_left;
 
 bool is_solid(uint8_t t) {
   for(int i=0;i<sizeof(solid_tiles);i++) {
@@ -178,135 +187,160 @@ void blank_line(int l) {
   for(int i=0;i<64;i++) vid_set_tile(i, l, BLANK_TILE);
 }
 
+void get_input() {
+  // Get Nunchuk data
+  i2c_send_reg(0x00);
+  delay(100);
+
+  jx = i2c_read();
+#ifdef debug
+  print("Joystick x: ");
+  print_hex(jx, 2);
+  print("\n");
+#endif
+
+  jy = i2c_read();
+#ifdef debug
+  print("Joystick y: ");
+  print_hex(jy, 2);
+  print("\n");
+#endif
+
+  uint8_t ax = i2c_read();
+  uint8_t ay = i2c_read();
+  uint8_t az = i2c_read();
+  uint8_t rest = i2c_read();
+
+#ifdef debug
+  print("Buttons: ");
+  print_hex(rest & 3, 2);
+  print("\n");
+#endif      
+  buttons = rest & 3;
+}
+
 void main() {
-   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
-   set_irq_mask(0x00);
+  reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
+  set_irq_mask(0x00);
 
-   setup_screen();
+  setup_screen();
 
-   songplayer_init(&song_petergun);
+  songplayer_init(&song_petergun);
 
-   // switch to dual IO mode
-   reg_spictrl = (reg_spictrl & ~0x007F0000) | 0x00400000;
+  // switch to dual IO mode
+  reg_spictrl = (reg_spictrl & ~0x007F0000) | 0x00400000;
 
-   // set timer interrupt to happen 1/50th sec from now
-   // (the music routine runs from the timer interrupt)
-   set_timer_counter(counter_frequency);
+  // set timer interrupt to happen 1/50th sec from now
+  // (the music routine runs from the timer interrupt)
+  set_timer_counter(counter_frequency);
 
-   uint16_t offset = 0;
-   bool forwards = true;
+  // Initialize the Nunchuk
+  i2c_send_cmd(0x40, 0x00);
 
-   uint32_t time_waster = 0i, tick_counter = 0;
-   uint16_t sprite_x = 16, sprite_y = 208;
-   int8_t x_speed = 1, y_speed = 0;
-   uint8_t under_tile_1 = 0, under_tile_2 = 0;
+  uint16_t offset = 0;
+  bool forwards = true;
 
-   score = 0;
-   coins = 0;
-   game_start = 0;
+  uint32_t time_waster = 0, tick_counter = 0;
+  int16_t sprite_x = 16, sprite_y = 208;
+  int8_t x_speed = 0, y_speed = 0;
+  uint8_t under_tile_1 = 0, under_tile_2 = 0;
 
-   while (1) {
+  score = 0;
+  coins = 0;
+  game_start = 0;
 
-     time_waster++;
-     if ((time_waster & 0x7ff) == 0x7ff) {
-       tick_counter++;
-   
-       vid_set_tile(forwards ? MARIO_X + (offset >> 3) -1 : MARIO_X + 6, 
-                    MARIO_Y, BLANK_TILE); 
-       show_text(MARIO_X + (offset >> 3), MARIO_Y, M_TILE, 5);
+  bool jumping = false;
+
+  while (1) {
+    time_waster++;
+    if ((time_waster & 0x7ff) == 0x7ff) {
+      tick_counter++;
+  
+      // Set up the top two lines 
+      blank_line(0);
+      blank_line(1);
+      show_text(MARIO_X + (offset >> 3), MARIO_Y, M_TILE, 5);
  
-       vid_set_tile(forwards ? SCORE_X + (offset >> 3) -1 : SCORE_X + 6, 
-                    SCORE_Y, BLANK_TILE); 
-       show_score(SCORE_X + (offset >> 3), SCORE_Y, score);
+      show_score(SCORE_X + (offset >> 3), SCORE_Y, score);
 
-       vid_set_tile(forwards ? COINS_X + (offset >> 3) -1 : COINS_X + 4, 
-                    COINS_Y, BLANK_TILE);
-       vid_set_tile(COINS_X + (offset >> 3), COINS_Y, COINS_TILE);
-       vid_set_tile(COINS_X + 1 + (offset >> 3), COINS_Y, X_TILE);
+      vid_set_tile(COINS_X + (offset >> 3), COINS_Y, 
+                   (tick_counter & 4 ? COINS_TILE : COINS2_TILE));
+      vid_set_tile(COINS_X + 1 + (offset >> 3), COINS_Y, X_TILE);
  
-       show_coins(COINS_X + 2 + (offset >> 3), COINS_Y, coins);
+      show_coins(COINS_X + 2 + (offset >> 3), COINS_Y, coins);
 
-       vid_set_tile(forwards ? WORLD_X + (offset >> 3) -1 : WORLD_X + 6, 
-                    WORLD_Y, BLANK_TILE); 
-       vid_set_tile(WORLD_X + (offset >> 3), WORLD_Y, W_TILE);
-       vid_set_tile(WORLD_X + 1 + (offset >> 3), WORLD_Y, O_TILE);
-       vid_set_tile(WORLD_X + 2+  (offset >> 3), WORLD_Y, R_TILE);
-       vid_set_tile(WORLD_X + 3 + (offset >> 3), WORLD_Y, L_TILE);
-       vid_set_tile(WORLD_X + 4 + (offset >> 3), WORLD_Y, D_TILE);
+      vid_set_tile(WORLD_X + (offset >> 3), WORLD_Y, W_TILE);
+      vid_set_tile(WORLD_X + 1 + (offset >> 3), WORLD_Y, O_TILE);
+      vid_set_tile(WORLD_X + 2+  (offset >> 3), WORLD_Y, R_TILE);
+      vid_set_tile(WORLD_X + 3 + (offset >> 3), WORLD_Y, L_TILE);
+      vid_set_tile(WORLD_X + 4 + (offset >> 3), WORLD_Y, D_TILE);
  
-       vid_set_tile(forwards ? WORLD_NUM_X + (offset >> 3) -1 : WORLD_NUM_X + 4, 
-                    WORLD_NUM_Y, BLANK_TILE); 
-       vid_set_tile(WORLD_NUM_X + (offset >> 3), WORLD_NUM_Y, ONE_TILE);
-       vid_set_tile(WORLD_NUM_X + 1 + (offset >> 3), WORLD_NUM_Y, HYPHEN_TILE);
-       vid_set_tile(WORLD_NUM_X + 2 + (offset >> 3), WORLD_NUM_Y, ONE_TILE);
+      vid_set_tile(WORLD_NUM_X + (offset >> 3), WORLD_NUM_Y, ONE_TILE);
+      vid_set_tile(WORLD_NUM_X + 1 + (offset >> 3), WORLD_NUM_Y, HYPHEN_TILE);
+      vid_set_tile(WORLD_NUM_X + 2 + (offset >> 3), WORLD_NUM_Y, ONE_TILE);
 
-       vid_set_tile(forwards ? TIME_X + (offset >> 3) - 1 : TIME_X + 5, 
-                    TIME_Y, BLANK_TILE); 
+      time_left = 400 - ((tick_counter - game_start) >> 3);
+      if (time_left == 0) game_start = tick_counter; 
 
-       time_left = 400 - ((tick_counter - game_start) >> 3);
-       if (time_left == 0) game_start = tick_counter; 
+      show_score(TIME_X + (offset >> 3), TIME_Y, time_left);
+      
+      if ((tick_counter & 0x3) == 0) {
+        // Get nunchuk input
+        get_input();
 
-       show_score(TIME_X + (offset >> 3), TIME_Y, time_left);
+        // Set the horizontal speed 
+        if (jx > 0xc0 && x_speed < MAX_SPEED) {
+          x_speed++;
+        } else if (jx < 0x40 && x_speed > - MAX_SPEED) {
+          x_speed--;
+        } else {
+          x_speed = 0;
+        }
 
-       if ((tick_counter & 0x3) == 0) {
-         if (y_speed < 0 || sprite_y > y_speed) sprite_y -= y_speed;
+        // Check for jump
+        if (buttons == 2 && !jumping) {
+          y_speed = JUMP_SPEED;
+          jumping = true;
+        }
 
-         uint8_t y_tile = (sprite_y >> 3) + 2;
-         uint8_t x_tile = sprite_x >> 3;
+        // Don't go above top of screen
+        if (y_speed < 0 || sprite_y > y_speed) sprite_y -= y_speed;
 
-         under_tile_1 = tile_data[(y_tile << 6) + x_tile];
-         under_tile_2 = tile_data[(y_tile << 6) + x_tile + 2];
-         
-         if (under_tile_1 != 0 || under_tile_2 != 0) {
-           print(" Under tiles ");
-           print_hex(under_tile_1, 4);
-           print(" , ");
-           print_hex(under_tile_2, 4);
-           print("\n");
-           //if (under_tile_1 != 0) vid_set_tile(x_tile, y_tile, 9);
-           //if (under_tile_2 != 0) vid_set_tile(x_tile+2, y_tile, 9);
-         }
+        // Check for solid object
+        if (y_speed < 0) {
+          for(int y = ((sprite_y + y_speed) >> 3);y < ((sprite_y + 8) >> 3); y++) { 
+            print("y is ");
+            print_hex(y, 4);
+            print(" , sprite_y is ");
+            print_hex(sprite_y, 4);
+            print(" , y_speed is ");
+            print_hex(y_speed, 4);
+            print("\n");
+            for(int x = (sprite_x >> 3); x < ((sprite_x + 24) >> 3); x++) {
+              if (is_solid(tile_data[((y+2) << 6) + x])) {
+                sprite_y = y << 3;
+                y_speed = 0;
+                jumping = false;
+              }
+            }
+          }
+        } 
+    
+        if (sprite_x > 160) offset = sprite_x - 160;
+        else offset = 0;
 
-         int8_t old_y_speed = y_speed;
+        if (offset > 192) offset = 192;
 
-         if (y_speed < 0 && (is_solid(under_tile_1) || 
-                             is_solid(under_tile_2))) {
-           y_speed = 16;
-           sprite_y = (sprite_y >> 3) << 3;
-         }
+        vid_set_x_ofs(offset);
+        sprite_x += x_speed;
 
-         if (old_y_speed <= -8) {
-           under_tile_1 = tile_data[((y_tile - 1) << 6) + x_tile];
-           under_tile_2 = tile_data[((y_tile - 1) << 6) + x_tile + 2];
+        if (sprite_x < 0) sprite_x = 0;
+        else if (sprite_x > 496) sprite_x = 496;
 
-           print_hex(under_tile_1, 4);
-           print(" , ");
-           print_hex(under_tile_2, 4);
-           print("\n");
-
-           if (is_solid(under_tile_1) ||
-               is_solid(under_tile_2)) {
-             print("Thru solid\n");
-             y_speed = 16;
-             sprite_y = ((sprite_y - 8) >> 3) << 3;
-           }
-         }           
-
-         y_speed -= 1; // Gravity
-         
-         vid_set_sprite_pos(0, sprite_x - offset, sprite_y);
-
-         if (sprite_x > 160) offset = sprite_x - 160;
-         if (offset > 192) offset = 192;
-         if (sprite_x >= 512) {
-           sprite_x = 0;
-           offset = 0;
-           blank_line(0);
-           blank_line(1);
-         }
-         vid_set_x_ofs(offset);
-         sprite_x += x_speed;
-       }
+        vid_set_sprite_pos(0, sprite_x - offset, sprite_y);
+        
+        y_speed -= GRAVITY; // Gravity
+      }
     }
   }
 }
