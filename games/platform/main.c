@@ -83,14 +83,23 @@ uint32_t set_timer_counter(uint32_t val); asm (
 
 
 const uint8_t solid_tiles[] = {0x01, 0x02, 0x03, 0x04, 0x0A, 0x0B, 
-                               0x10, 0x12, 0x18, 0x19, 
+                               0x0C, 0x10, 0x12, 0x13, 0x18, 0x19, 
                                0x20, 0x21, 0x28, 0x29, 0x30, 0x31};
+
+const uint8_t coin_tiles[] = {0x20, 0x21};
 
 bool is_solid(uint8_t t) {
   for(int i=0;i<sizeof(solid_tiles);i++) {
     if (solid_tiles[i] == t) return true;
   }
   return false;
+}
+
+bool is_coin_tile(uint8_t t) {
+   for(int i=0;i<sizeof(coin_tiles);i++) {
+     if (coin_tiles[i] == t) return true;
+   }
+   return false;
 }
 
 void setup_screen() {
@@ -162,7 +171,7 @@ void show_coins(int x, int y, int coins) {
   int s = coins;
   for(int i=0; i<2; i++) {
     int d = 0;
-    if (i == 4) d = s;
+    if (i == 1) d = s;
     else {
       int div = divisor[i+3];
       while (s >= div) {
@@ -305,11 +314,12 @@ void main() {
 
         // Don't go above top of screen
         if (y_speed < 0 || sprite_y > y_speed) sprite_y -= y_speed;
+        if (sprite_y > 208) sprite_y = 208;
 
-        // Check for solid object
+        // Check for solid object below
         if (y_speed < 0) {
           for(int y = ((sprite_y + y_speed) >> 3);y < ((sprite_y + 8) >> 3); y++) { 
-            print("y is ");
+            print("down y is ");
             print_hex(y, 4);
             print(" , sprite_y is ");
             print_hex(sprite_y, 4);
@@ -324,7 +334,71 @@ void main() {
               }
             }
           }
+        } else if (y_speed > 0) { // Check for object above
+          for(int y = (sprite_y + y_speed)  >> 3;y > sprite_y >> 3; y--) { 
+            print("up y is ");
+            print_hex(y, 4);
+            print(" , sprite_y is ");
+            print_hex(sprite_y, 4);
+            print(" , y_speed is ");
+            print_hex(y_speed, 4);
+            print("\n");
+            for(int x = ((sprite_x + 16)  >> 3); x < ((sprite_x + 24 + x_speed) >> 3); x++) {
+              uint8_t t = tile_data[(y << 6) + x];
+              if (is_solid(t)) {
+                print("Tile is ");
+                print_hex(t, 4);
+                print("\n");
+                if (is_coin_tile(t)) coins++;
+                sprite_y = (y << 3) + 8;
+                y_speed = 0;
+                jumping = false;
+              }
+            }
+          }
         } 
+
+        if (x_speed > 0) { // Check for object to right
+          for(int x = (sprite_x + 16)   >> 3;x < (sprite_x + 24 + x_speed) >> 3; x++) {
+            print("right x is ");
+            print_hex(x, 4);
+            print(" , sprite_x is ");
+            print_hex(sprite_x, 4);
+            print(" , x_speed is ");
+            print_hex(x_speed, 4);
+            print("\n");
+            for(int y = (sprite_y >> 3); y < ((sprite_y + 16) >> 3); y++) {
+              uint8_t t = tile_data[(y << 6) + x];
+              print("Tile is ");
+              print_hex(t, 4);
+              print("\n");
+              if (is_solid(t)) {
+                x_speed = 0;
+                sprite_x = (x << 3) - 16;
+              }
+            }
+          } 
+        } else if (x_speed < 0) { // Check for object to left
+            for(int x = (sprite_x + x_speed)  >> 3;x >= sprite_x >> 3; x--) {
+            print("left x is ");
+            print_hex(x, 4);
+            print(" , sprite_x is ");
+            print_hex(sprite_x, 4);
+            print(" , x_speed is ");
+            print_hex(x_speed, 4);
+            print("\n");
+            for(int y = (sprite_y >> 3); y < ((sprite_y + 16) >> 3); y++) {
+              uint8_t t = tile_data[(y << 6) + x];
+              print("Tile is ");
+              print_hex(t, 4);
+              print("\n");
+              if (is_solid(t)) {
+                x_speed = 0;
+                sprite_x = (x << 3) + 8;
+              }
+            }
+          }
+        }
     
         if (sprite_x > 160) offset = sprite_x - 160;
         else offset = 0;
