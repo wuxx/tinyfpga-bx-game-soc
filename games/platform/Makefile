@@ -23,7 +23,7 @@ VERILOG_FILES = \
 PCF_FILE = $(HDL_DIR)/pins.pcf
 LDS_FILE = $(FIRMWARE_DIR)/sections.lds
 START_FILE = $(FIRMWARE_DIR)/start.S
-C_FILES = main.c song_petergun.c \
+C_FILES = main.c song_pacman.c \
 	$(INCLUDE_DIR)/songplayer/songplayer.c \
 	$(INCLUDE_DIR)/uart/uart.c \
   $(INCLUDE_DIR)/video/video.c \

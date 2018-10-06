@@ -59,13 +59,15 @@ extern uint32_t sram;
 #define L_TILE 51
 #define D_TILE 52
 
-const struct song_t song_petergun;
+const struct song_t song_pacman;
 
 uint32_t counter_frequency = 16000000/50;  /* 50 times per second */
 
-uint16_t score, coins;
+uint16_t score, coins, offset;
 uint32_t game_start, time_left;
 uint8_t buttons, jx, jy;
+int16_t goomba_x[3];
+bool goomba_forwards[3];
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
@@ -128,13 +130,35 @@ void setup_screen() {
     }
   }
 
-  vid_write_sprite_memory(0, sprites[0]);
+  for(int i=0;i<8;i++) vid_write_sprite_memory(i, sprites[i]);
+  for(int i=0;i<8;i++) vid_write_sprite_memory(i+8, more_sprites[i]);
+
+  // Position Mario
   vid_set_sprite_pos(0,16,208);
   vid_set_sprite_colour(0, 5);
   vid_set_image_for_sprite(0, 0);
   vid_enable_sprite(0, 1);
+
+  // Position Goombas
+  for(int i=0;i<3;i++) {
+    vid_set_sprite_pos(1+i,96 + (i << 5)  , 208);
+    vid_set_sprite_colour(1+i, 6);
+    vid_set_image_for_sprite(1+i, 8);
+    vid_enable_sprite(1+i, 1);
+  }
 }
 
+void move_goomba() {
+  for(int i=0; i<3; i++) {
+    if (goomba_forwards[i]) {
+      if (++goomba_x[i] == 212) goomba_forwards[i] = false;
+    } else {
+      if (--goomba_x[i] == 0) goomba_forwards[i] = true;
+    }
+    vid_set_sprite_pos(1+i, goomba_x[i] - offset, 208);
+  }
+}
+      
 void irq_handler(uint32_t irqs, uint32_t* regs)
 {
   /* timer IRQ */
@@ -144,7 +168,6 @@ void irq_handler(uint32_t irqs, uint32_t* regs)
 
     songplayer_tick();
   }
-
 }
 
 const int divisor[] = {10000,1000,100,10};
@@ -234,7 +257,7 @@ void main() {
 
   setup_screen();
 
-  songplayer_init(&song_petergun);
+  songplayer_init(&song_pacman);
 
   // switch to dual IO mode
   reg_spictrl = (reg_spictrl & ~0x007F0000) | 0x00400000;
@@ -246,7 +269,7 @@ void main() {
   // Initialize the Nunchuk
   i2c_send_cmd(0x40, 0x00);
 
-  uint16_t offset = 0;
+  offset = 0;
   bool forwards = true;
 
   uint32_t time_waster = 0, tick_counter = 0;
@@ -259,6 +282,11 @@ void main() {
   game_start = 0;
 
   bool jumping = false;
+
+  for(int i=0;i<3;i++) {
+    goomba_forwards[i] = false;
+    goomba_x[i] = 96 + (i << 5);
+  }
 
   while (1) {
     time_waster++;
@@ -308,6 +336,7 @@ void main() {
 
         // Check for jump
         if (buttons == 2 && !jumping) {
+          songplayer_trigger_effect(9);
           y_speed = JUMP_SPEED;
           jumping = true;
         }
@@ -316,7 +345,7 @@ void main() {
         if (y_speed < 0 || sprite_y > y_speed) sprite_y -= y_speed;
         if (sprite_y > 208) sprite_y = 208;
 
-        // Check for solid object below
+// Check for solid object below
         if (y_speed < 0) {
           for(int y = ((sprite_y + y_speed) >> 3);y < ((sprite_y + 8) >> 3); y++) { 
             print("down y is ");
@@ -327,10 +356,19 @@ void main() {
             print_hex(y_speed, 4);
             print("\n");
             for(int x = (sprite_x >> 3); x < ((sprite_x + 24) >> 3); x++) {
-              if (is_solid(tile_data[((y+2) << 6) + x])) {
+              uint8_t t = tile_data[((y+2) << 6) + x];
+              if (is_solid(t)) {
+                print("Tile is ");
+                print_hex(t, 4);
+                print("\n");
                 sprite_y = y << 3;
                 y_speed = 0;
                 jumping = false;
+                if (t == 0x10) {
+                  sprite_y += 16;
+                  songplayer_trigger_effect(8);
+                  break;
+                } 
               }
             }
           }
@@ -349,10 +387,22 @@ void main() {
                 print("Tile is ");
                 print_hex(t, 4);
                 print("\n");
-                if (is_coin_tile(t)) coins++;
                 sprite_y = (y << 3) + 8;
                 y_speed = 0;
                 jumping = false;
+                if (is_coin_tile(t)) {
+                  coins++;
+                  score += 100;
+                  songplayer_trigger_effect(10);
+                  for(int i=0;i<5;i++) {
+                    vid_set_tile(x, y-4, COINS_TILE);
+                    delay(5000);
+                    vid_set_tile(x, y-4, COINS2_TILE);
+                    delay(5000);
+                  }
+                  vid_set_tile(x, y-4, BLANK_TILE);
+                  break;
+                }
               }
             }
           }
@@ -411,9 +461,12 @@ void main() {
         if (sprite_x < 0) sprite_x = 0;
         else if (sprite_x > 496) sprite_x = 496;
 
+        vid_set_image_for_sprite(0, x_speed < 0 ? 1 : 0);
         vid_set_sprite_pos(0, sprite_x - offset, sprite_y);
         
         y_speed -= GRAVITY; // Gravity
+
+        move_goomba();
       }
     }
   }
