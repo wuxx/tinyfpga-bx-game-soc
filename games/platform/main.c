@@ -146,6 +146,9 @@ void setup_screen() {
     vid_set_image_for_sprite(1+i, 8);
     vid_enable_sprite(1+i, 1);
   }
+
+  // Set color for score sprite
+  vid_set_sprite_colour(4, 7);
 }
 
 void move_goomba() {
@@ -392,8 +395,11 @@ void main() {
                 jumping = false;
                 if (is_coin_tile(t)) {
                   coins++;
-                  score += 100;
+                  score += 200;
                   songplayer_trigger_effect(10);
+                  vid_set_image_for_sprite(4,10); // 200 points
+                  vid_set_sprite_pos(4, x << 3, (y-3) << 3);
+                  vid_enable_sprite(4, 1);
                   for(int i=0;i<5;i++) {
                     vid_set_tile(x, y-4, COINS_TILE);
                     delay(5000);
@@ -401,6 +407,7 @@ void main() {
                     delay(5000);
                   }
                   vid_set_tile(x, y-4, BLANK_TILE);
+                  vid_enable_sprite(4, 0);
                   break;
                 }
               }
