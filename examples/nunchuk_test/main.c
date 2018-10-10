@@ -32,7 +32,14 @@ void main() {
     reg_spictrl = (reg_spictrl & ~0x007F0000) | 0x00400000;
  
     // Initialize the Nunchuk
-    i2c_send_cmd(0x40, 0x00);
+    //i2c_send_cmd(0x40, 0x00);
+
+    // Initialize the classic controller
+    i2c_write(0xF0, 0x55);
+
+    delay(100000);
+
+    i2c_write(0xFB, 0x00);
 
     uint32_t timer = 0;
        
@@ -63,8 +70,8 @@ void main() {
           print_hex(az, 2);
           print("\n");
           uint8_t rest = i2c_read();
-          print("Buttons: ");
-          print_hex(rest & 3, 2);
+          print("Rest: ");
+          print_hex(rest, 2);
           print("\n");
         } 
     } 
