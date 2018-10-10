@@ -14,12 +14,21 @@ module video_vga
 	input [3:0]  iomem_wstrb,
 	input [31:0] iomem_addr,
 	input [31:0] iomem_wdata,
+`ifdef ili9341
+  output reg       nreset,
+  output reg       cmd_data, // 1 => Data, 0 => Command
+  output           ncs, // Chip select (low enable)
+  output reg       write_edge, // Write signal on rising edge
+  output           read_edge, // Read signal on rising edge
+  output           backlight,
+ output reg [7:0] dout);
+`else
   output vga_hsync,
   output vga_vsync,
   output vga_r,
   output vga_g,
   output vga_b);
-
+`endif
   reg[9:0] xpos;
   reg[9:0] ypos;
 
@@ -170,6 +179,59 @@ module video_vga
     end
 	end
 
+`ifdef ili9341
+   reg vga_r;
+   reg vga_g;
+   reg vga_b;
+
+   reg        pix_clk = 0;
+   reg        reset_cursor = 0;
+   wire       busy;
+   
+ wire video_active = 1;
+
+   ili9341 lcd (
+                .resetn(resetn),
+                .clk_16MHz (clk),
+                .nreset (nreset),
+                .cmd_data (cmd_data),
+                .ncs (ncs),
+                .write_edge (write_edge),
+                .read_edge (read_edge),
+                .backlight (backlight),
+                .dout (dout),
+                .reset_cursor (reset_cursor),
+                .pix_data ({vga_r?5'b11111:5'b0,
+			    vga_g?6'b11111:6'b0,
+			    vga_b?5'b11111:5'b0}),
+                .pix_clk (pix_clk),
+                .busy (busy)
+                );
+
+   always @(posedge busy or negedge busy) begin
+      if (busy == 0) begin
+
+         if (xpos < 319) begin
+            if (ypos < 239) begin
+               ypos <= ypos + 1;
+            end else begin
+               ypos <= 0;
+               xpos <= xpos + 1;
+            end
+
+            pix_clk <= 1;
+
+         end else begin
+            xpos <= 0;
+            reset_cursor <= 1;
+         end
+
+      end else begin
+         pix_clk <= 0;
+         reset_cursor <= 0;
+      end
+   end
+`else
   VGASyncGen vga_generator(
     .clk(clk),
     .hsync(vga_hsync),
@@ -178,5 +240,5 @@ module video_vga
     .y_px(ypos),
     .activevideo(video_active)
   );
-
+`endif
 endmodule

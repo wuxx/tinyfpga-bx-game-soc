@@ -1,4 +1,5 @@
 module ili9341 (
+           input            resetn,
            input            clk_16MHz,
            output reg       nreset,
            output reg       cmd_data, // 1 => Data, 0 => Command
@@ -204,107 +205,110 @@ module ili9341 (
 
    always @(posedge clk_16MHz) begin
 
-      case (tx_state)
-        TX_IDLE : begin
-           write_edge <= 0;
-        end
-        TX_DATA_READY : begin
-           write_edge <= 1;
-           tx_state <= TX_IDLE;
-        end
-      endcase
+      if (!resetn) state <= RESET;
+      else begin 
 
-      if (delay_ticks != 0) begin
-
-         delay_ticks <= delay_ticks - 1;
-
-      end else begin
-
-         case (state)
-           RESET : begin
-              nreset <= 0;
-              dout <= 0;
-              write_edge <= 0;
-              cmd_data <= 0;
-
-              state <= NOT_RESET;
-           end
-
-           NOT_RESET : begin
-              nreset <= 1;
-              state <= WAKEUP;
-              delay_ticks <= ms120;
-           end
-
-           WAKEUP : begin
-              if (tx_state == TX_IDLE) begin
-                 cmd_data <= 0;
-                 dout <= 8'h11;
-                 tx_state <= TX_DATA_READY;
-                 state <= INIT;
-                 delay_ticks <= ms5;
-              end
-           end
-
-           INIT: begin
-              if (init_seq_counter < INIT_SEQ_LEN) begin
-                 if (tx_state == TX_IDLE) begin
-                    cmd_data <= INIT_SEQ[init_seq_counter][8];
-                    dout <= INIT_SEQ[init_seq_counter][7:0];
-
-                    init_seq_counter <= init_seq_counter + 1;
-                    tx_state <= TX_DATA_READY;
-                 end
-              end else begin
-                 state <= CURSOR;
-                 delay_ticks <= ms50;
-              end
-           end
-
-           CURSOR: begin
-              if (cursor_seq_counter < CURSOR_SEQ_LEN) begin
-                 if (tx_state == TX_IDLE) begin
-                    cmd_data <= CURSOR_SEQ[cursor_seq_counter][8];
-                    dout <= CURSOR_SEQ[cursor_seq_counter][7:0];
-
-                    cursor_seq_counter <= cursor_seq_counter + 1;
-                    tx_state <= TX_DATA_READY;
-                 end
-              end else begin
-                 state <= READY;
-                 cursor_seq_counter <= 0;
-              end
-           end
-
-           READY : begin
-
-              case (pix_state)
-
-                PIX_IDLE : begin
-                   if (reset_cursor == 1) begin
-                      state <= CURSOR;
-                   end else if (pix_clk == 1 && tx_state == TX_IDLE) begin
-                      cmd_data <= 1;
-                      dout <= pix_data[15:8];
-                      tx_state <= TX_DATA_READY;
-                      pix_state <= PIX_SEND;
-                   end
-                end
-
-                PIX_SEND: begin
-                   if (tx_state == TX_IDLE) begin
-                      cmd_data <= 1;
-                      dout <= pix_data[7:0];
-                      tx_state <= TX_DATA_READY;
-                      pix_state <= PIX_IDLE;
-                   end
-                end
-              endcase
-           end
-
+         case (tx_state)
+            TX_IDLE : begin
+               write_edge <= 0;
+            end
+            TX_DATA_READY : begin
+               write_edge <= 1;
+               tx_state <= TX_IDLE;
+            end
          endcase
+
+         if (delay_ticks != 0) begin
+
+            delay_ticks <= delay_ticks - 1;
+
+         end else begin
+
+            case (state)
+               RESET : begin
+                  nreset <= 0;
+                  dout <= 0;
+                  write_edge <= 0;
+                  cmd_data <= 0;
+
+                  state <= NOT_RESET;
+               end
+
+               NOT_RESET : begin
+                  nreset <= 1;
+                  state <= WAKEUP;
+                  delay_ticks <= ms120;
+               end
+
+               WAKEUP : begin
+                  if (tx_state == TX_IDLE) begin
+                     cmd_data <= 0;
+                     dout <= 8'h11;
+                     tx_state <= TX_DATA_READY;
+                     init_seq_counter <= 0; 
+                     state <= INIT;
+                     delay_ticks <= ms5;
+                  end
+               end
+
+               INIT: begin
+                  if (init_seq_counter < INIT_SEQ_LEN) begin
+                     if (tx_state == TX_IDLE) begin
+                        cmd_data <= INIT_SEQ[init_seq_counter][8];
+                        dout <= INIT_SEQ[init_seq_counter][7:0];
+
+                        init_seq_counter <= init_seq_counter + 1;
+                        tx_state <= TX_DATA_READY;
+                     end
+                  end else begin
+                     state <= CURSOR;
+                     delay_ticks <= ms50;
+                  end
+               end
+
+               CURSOR: begin
+                  if (cursor_seq_counter < CURSOR_SEQ_LEN) begin
+                     if (tx_state == TX_IDLE) begin
+                        cmd_data <= CURSOR_SEQ[cursor_seq_counter][8];
+                        dout <= CURSOR_SEQ[cursor_seq_counter][7:0];
+
+                        cursor_seq_counter <= cursor_seq_counter + 1;
+                        tx_state <= TX_DATA_READY;
+                     end
+                  end else begin
+                     state <= READY;
+                     cursor_seq_counter <= 0;
+                  end
+               end
+
+               READY : begin
+
+                  case (pix_state)
+
+                    PIX_IDLE : begin
+                       if (reset_cursor == 1) begin
+                          state <= CURSOR;
+                       end else if (pix_clk == 1 && tx_state == TX_IDLE) begin
+                          cmd_data <= 1;
+                          dout <= pix_data[15:8];
+                          tx_state <= TX_DATA_READY;
+                          pix_state <= PIX_SEND;
+                       end
+                    end
+
+                    PIX_SEND: begin
+                       if (tx_state == TX_IDLE) begin
+                          cmd_data <= 1;
+                          dout <= pix_data[7:0];
+                          tx_state <= TX_DATA_READY;
+                          pix_state <= PIX_IDLE;
+                       end
+                    end
+                  endcase
+               end
+            endcase
+         end
       end
    end
 
 endmodule
-
