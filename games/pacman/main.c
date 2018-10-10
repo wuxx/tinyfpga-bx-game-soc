@@ -1257,7 +1257,6 @@ void main() {
           setup_board();
           if (!auto_play) show_ready();
           else new_life();
-          num_lives = 3; // This is probably wrong
         }
       }
 
