@@ -8,7 +8,7 @@ extern uint32_t sram;
 
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
-#define reg_buttons  (*(volatile uint32_t*)0x03000004)
+#define reg_buttons  (*(volatile uint32_t*)0x03000000)
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
