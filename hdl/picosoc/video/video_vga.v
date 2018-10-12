@@ -201,21 +201,21 @@ module video_vga
                 .backlight (backlight),
                 .dout (dout),
                 .reset_cursor (reset_cursor),
-                .pix_data ({vga_r?5'b11111:5'b0,
-			    vga_g?6'b11111:6'b0,
-			    vga_b?5'b11111:5'b0}),
+                .pix_data ({vga_b?5'b11111:5'b0,
+			    vga_g?6'b111111:6'b0,
+			    vga_r?5'b11111:5'b0}),
                 .pix_clk (pix_clk),
                 .busy (busy)
                 );
 
-   always @(posedge busy or negedge busy) begin
-      if (busy == 0) begin
+   always @(posedge clk) begin
+      if (busy == 0 && pix_clk == 0) begin
 
          if (xpos < 319) begin
-            if (ypos < 239) begin
-               ypos <= ypos + 1;
+            if (ypos > 0) begin
+               ypos <= ypos - 2;
             end else begin
-               ypos <= 0;
+               ypos <= 478;
                xpos <= xpos + 1;
             end
 

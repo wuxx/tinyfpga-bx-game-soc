@@ -21,8 +21,18 @@ extern uint32_t sram;
 
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
+#define reg_buttons  (*(volatile uint32_t*)0x03000000)
 
 extern const struct song_t song_pacman;
+
+// Buttons
+
+#define BUTTON_UP 0x04
+#define BUTTON_DOWN 0x10
+#define BUTTON_LEFT 0x80
+#define BUTTON_RIGHT 0x08
+#define BUTTON_B 0x20
+#define BUTTON_A 0x040
 
 // Board timensions
 #define TILE_SIZE 8
@@ -259,7 +269,7 @@ uint32_t tick_counter, game_start, hunt_start, stage_over_start,
          skip_ticks, life_over_start;
 bool play, chomp, game_over, life_over, new_stage;
 bool auto_play;
-uint8_t buttons, jx, jy, num_players;
+uint8_t buttons, num_players;
 
 // Set the IRQ mask
 uint32_t set_irq_mask(uint32_t mask); asm (
@@ -911,9 +921,7 @@ void show_hiscore_label() {
 }
 
 void get_input() {
-  buttons = 3;
-  jx = 0x80;
-  jx = 0x80;
+  buttons = reg_buttons;
 }
 
 void disable_sprites() {
@@ -960,12 +968,12 @@ void show_intro_screen() {
     vid_set_sprite_pos(i+1, 50, 60 + 16*i);
     vid_enable_sprite(i+1, 1);
     get_input();
-    if (buttons == 2) break;
+    if (buttons & BUTTON_A) break;
     delay(50000);
   }
 
 
-  if (buttons != 2) {
+  if (!(buttons & BUTTON_A)) {
     setup_intro_tiles(15, 30); 
     delay(50000);
 
@@ -988,12 +996,12 @@ void show_intro_screen() {
         vid_set_sprite_pos(j+1, 224 + j*24 - i * 16, 196);
       }
       get_input();
-      if (buttons == 2) break;
+      if (buttons & BUTTON_A) break;
 
       delay(10000);
     }
     
-    if (buttons != 2) {
+    if (!(buttons & BUTTON_A)) {
       delay(50000);
   
       // Remove the pac-dot
@@ -1021,7 +1029,7 @@ void show_intro_screen() {
       }
 
       get_input();
-      if (buttons != 2) delay(50000);
+      if (buttons  & BUTTON_A) delay(50000);
     }
   }
 
@@ -1032,7 +1040,7 @@ void show_intro_screen() {
   clear_screen();
 
   start_game();    
-  auto_play = (buttons != 2);
+  auto_play = (!(buttons & BUTTON_A));
 }
 
 // Show the start screen
@@ -1054,21 +1062,21 @@ void show_start_screen() {
 
     get_input();
 
-    if (buttons == 1) {
+    if (buttons & BUTTON_B) {
       vid_set_tile(13, 30 + 13 + num_players*2, 0);  
       num_players = (num_players == 1 ? 2 : 1);
       vid_set_tile(13, 30 + 13 + num_players*2,28);  
       delay(20000);
     }
 
-    if (buttons == 2) break;
+    if (buttons & BUTTON_A) break;
 
     delay(100);
   }
 
   clear_screen();
 
-  if (buttons != 2) show_intro_screen();
+  if (!(buttons & BUTTON_A)) show_intro_screen();
   else {
     start_game();
     auto_play = false;
@@ -1099,9 +1107,6 @@ void new_life() {
 void main() {
   reg_uart_clkdiv = 138;  // 16,000,000 / 115,200
   set_irq_mask(0x00);
-
-  // Initialize the Nunchuk
-  i2c_send_cmd(0x40, 0x00);
 
   // Default high score
   hi_score = 10000;
@@ -1240,7 +1245,7 @@ void main() {
       get_input();
     
       // Check buttons for start or restart
-      if (buttons < 3) { 
+      if (buttons & BUTTON_A) { 
         if (auto_play) {
           auto_play = false;
           new_life();
@@ -1248,7 +1253,7 @@ void main() {
           show_start_screen();
           continue;
         }
-        if (buttons == 0 || buttons == 2) {
+        if (buttons & BUTTON_A) {
           auto_play = false;
           if (!play) {
             remove_ready();            
@@ -1279,16 +1284,16 @@ void main() {
       int n = board[sprite_y[PACMAN]][sprite_x[PACMAN]];
 
       if (play) { // Playing a game
-        if (sprite_x[PACMAN] < 30 && jx > 0xc0 && (n & CAN_GO_RIGHT)) {
+        if (sprite_x[PACMAN] < 30 && (buttons & BUTTON_RIGHT) && (n & CAN_GO_RIGHT)) {
           sprite_x[PACMAN]++; 
           direction=RIGHT;
-        } else if (sprite_x[PACMAN] > 0 && jx < 0x40 && (n & CAN_GO_LEFT) ) {
+        } else if (sprite_x[PACMAN] > 0 && (buttons & BUTTON_LEFT) && (n & CAN_GO_LEFT)) {
           sprite_x[PACMAN]--; 
           direction=LEFT;
-         } else if (sprite_y[PACMAN] < 28 && jy < 0x40 && (n & CAN_GO_DOWN)) {
+         } else if (sprite_y[PACMAN] < 28 && (buttons & BUTTON_DOWN) && (n & CAN_GO_DOWN)) {
           sprite_y[PACMAN]++; 
           direction=DOWN;
-         } else if (sprite_y[PACMAN] > 0 && jy > 0xc0 && (n & CAN_GO_UP)) {
+         } else if (sprite_y[PACMAN] > 0 && (buttons & BUTTON_UP) && (n & CAN_GO_UP)) {
           sprite_y[PACMAN]--; 
           direction=UP;
          }

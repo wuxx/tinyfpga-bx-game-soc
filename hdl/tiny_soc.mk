@@ -8,7 +8,7 @@ hardware.asc: $(PCF_FILE) hardware.blif
 	arachne-pnr -d 8k -P cm81 -o hardware.asc -p $(PCF_FILE) hardware.blif
 
 hardware.bin: hardware.asc
-	icetime -d hx8k -c 12 -mtr hardware.rpt hardware.asc
+	icetime -d hx8k -c 16 -mtr hardware.rpt hardware.asc
 	icepack hardware.asc hardware.bin
 
 firmware.elf: $(C_FILES) 

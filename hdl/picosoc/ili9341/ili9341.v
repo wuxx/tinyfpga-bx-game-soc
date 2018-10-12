@@ -230,6 +230,7 @@ module ili9341 (
                   dout <= 0;
                   write_edge <= 0;
                   cmd_data <= 0;
+                  delay_ticks = ms5;
 
                   state <= NOT_RESET;
                end

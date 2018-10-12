@@ -14,10 +14,8 @@ VERILOG_FILES = \
 	$(HDL_DIR)/picosoc/video/texture_memory.v \
 	$(HDL_DIR)/picosoc/video/tile_memory.v \
 	$(HDL_DIR)/picosoc/video/sprite.v \
-	$(HDL_DIR)/picosoc/ili9341/ili9341.v \
 	$(HDL_DIR)/picosoc/video/video_vga.v \
-  $(HDL_DIR)/picosoc/nunchuk/I2C_master.v \
-	$(HDL_DIR)/picosoc/i2c/i2c.v \
+	$(HDL_DIR)/picosoc/ili9341/ili9341.v \
 	$(HDL_DIR)/picosoc/gpio/gpio.v
 
 PCF_FILE = $(HDL_DIR)/portable.pcf
@@ -26,8 +24,7 @@ START_FILE = $(FIRMWARE_DIR)/start.S
 C_FILES = main.c song_pacman.c \
 	$(INCLUDE_DIR)/songplayer/songplayer.c \
 	$(INCLUDE_DIR)/uart/uart.c \
-  $(INCLUDE_DIR)/video/video.c \
-	$(INCLUDE_DIR)/nunchuk/nunchuk.c
+  $(INCLUDE_DIR)/video/video.c 
 DEFINES = -Dpdm_audio -Dgpio -Dvga -Dili9341
 
 include $(HDL_DIR)/tiny_soc.mk
