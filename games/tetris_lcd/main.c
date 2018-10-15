@@ -283,16 +283,6 @@ void check_board() {
   }
 }
 
-uint64_t x = 0, w = 0, s = 0xb5ad4eceda1ce2a9;
-
-uint32_t msws() {
-   uint64_t old_x = x;
-   for(uint64_t i=0;i<old_x;i++) x += x; 
-   x += (w += s); 
-   return x = (x>>32) | (x<<32);
-
-}
-      
 // Delay in some units or other
 void delay(uint32_t n) {
   for (uint32_t i = 0; i < n; i++) asm volatile ("");
@@ -349,6 +339,10 @@ void main() {
     if ((time_waster & 0x7ff) == 0x7ff) {
       tick_counter++;
 
+      // Blank the old piece
+      blank_piece(old_x, old_y, old_piece, old_orientation);
+      blank_piece(NEXT_PIECE_X, NEXT_PIECE_Y, piece, 0);
+ 
       // Switch to new piece if old one has fallen
       if (fallen) {
         piece = next_piece;
@@ -375,14 +369,10 @@ void main() {
       // Show the board
       show_board();  
 
-      // Blank the old piece
-      blank_piece(old_x, old_y, old_piece, old_orientation);
- 
       // Show the current piece on the board
       show_piece(piece_x, piece_y, piece, orientation);
 
       // Show next piece
-      blank_piece(NEXT_PIECE_X, NEXT_PIECE_Y, piece, 0);
       show_piece(NEXT_PIECE_X, NEXT_PIECE_Y, next_piece, 0);
 
       // Save current values
@@ -402,7 +392,9 @@ void main() {
       }
 
       if ((buttons & BUTTON_RIGHT) && 
-          piece_width(piece, orientation) + piece_x < BOARD_WIDTH + 1) 
+          (piece_width(piece, orientation) + 
+          (offsets[piece][orientation] >> 4) +
+          piece_x < BOARD_WIDTH + 1)) 
         piece_x++;
 
       // Rotate the piece
