@@ -3,11 +3,12 @@ module video_oled
 (
   input resetn,
   input clk,
-	input iomem_valid,
+  input iomem_valid,
   output reg iomem_ready,
-	input [3:0]  iomem_wstrb,
-	input [31:0] iomem_addr,
-	input [31:0] iomem_wdata,
+  input [3:0]  iomem_wstrb,
+  input [31:0] iomem_addr,
+  input [31:0] iomem_wdata,
+  output [31:0] iomem_rdata,
   inout OLED_SPI_SCL,
   inout OLED_SPI_SDA,
   inout OLED_SPI_RES,
@@ -18,7 +19,7 @@ module video_oled
   reg [31:0] spi_rdata;
   reg spi_ready;
   spi_oled #(.CLOCK_FREQ_HZ(16000000)) oled (
-      .clk(CLK),
+      .clk(clk),
       .resetn(resetn),
       .ctrl_wr(spi_wr),
       .ctrl_rd(spi_rd),
@@ -33,15 +34,15 @@ module video_oled
       .rst(OLED_SPI_RES));
 
 
-	always @(posedge clk) begin
+  always @(posedge clk) begin
     spi_wr <= 0;
     spi_rd <= 0;
+    iomem_ready <= 0;
     if (iomem_valid && !iomem_ready) begin
          iomem_ready <= spi_ready;
          iomem_rdata <= spi_rdata;
-         spi_wr <= |iomem_wstrb;
-         spi_rd <= ~(|iomem_wstrb);
+         spi_wr <= spi_ready ? 0 : iomem_wstrb;
     end
-	end
+  end
 
 endmodule

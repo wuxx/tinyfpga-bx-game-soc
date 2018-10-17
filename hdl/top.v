@@ -150,14 +150,17 @@ module top (
   );
 `endif
 
+  wire oled_iomem_ready;
+
 `ifdef oled
-  video_oled(
+  video_oled oled (
     .clk(CLK),
     .resetn(resetn),
     .iomem_valid(iomem_valid && video_en),
     .iomem_wstrb(iomem_wstrb),
     .iomem_addr(iomem_addr),
     .iomem_wdata(iomem_wdata),
+    .iomem_ready(oled_iomem_ready),
     .OLED_SPI_SDA(OLED_SPI_SDA),
     .OLED_SPI_SCL(OLED_SPI_SCL),
     .OLED_SPI_CS(OLED_SPI_CS),
@@ -247,7 +250,12 @@ wire i2c_iomem_ready;
 `endif
 
 
-assign iomem_ready = i2c_en ? i2c_iomem_ready : gpio_en ? gpio_iomem_ready : 1'b1;
+assign iomem_ready = i2c_en ? i2c_iomem_ready : gpio_en ? gpio_iomem_ready 
+`ifdef oled
+                     : video_en ? oled_iomem_ready
+`endif
+                     : 1'b1;
+
 assign iomem_rdata =  i2c_iomem_ready ? i2c_iomem_rdata
                     : gpio_iomem_ready ? gpio_iomem_rdata
                     : 32'h0;
