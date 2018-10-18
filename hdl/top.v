@@ -52,6 +52,13 @@ module top (
     inout OLED_SPI_CS,
 `endif
 
+`ifdef sdcard
+    inout SD_MISO,
+    inout SD_MOSI,
+    inout SD_SCK,
+    inout SD_CS,
+`endif
+
 `ifdef ili9341
         output lcd_D0,
 	output lcd_D1,
@@ -126,13 +133,14 @@ module top (
     wire [3:0]  iomem_wstrb;
     wire [31:0] iomem_addr;
     wire [31:0] iomem_wdata;
-    wire  [31:0] iomem_rdata;
+    wire [31:0] iomem_rdata;
 
     // enable signals for each of the peripherals
     wire gpio_en   = (iomem_addr[31:24] == 8'h03); /* GPIO mapped to 0x03xx_xxxx */
     wire audio_en  = (iomem_addr[31:24] == 8'h04); /* Audio device mapped to 0x04xx_xxxx */
     wire video_en  = (iomem_addr[31:24] == 8'h05); /* Video device mapped to 0x05xx_xxxx */
-    wire i2c_en    = (iomem_addr[31:24] == 8'h07); /* I2C device mapped to 0x06xx_xxxx */
+    wire sdcard_en  = (iomem_addr[31:24] == 8'h06); /* SPI SD card mapped to 0x06xx_xxxx */
+    wire i2c_en    = (iomem_addr[31:24] == 8'h07); /* I2C device mapped to 0x067xx_xxxx */
 
 
 `ifdef pdm_audio
@@ -168,6 +176,26 @@ module top (
     .OLED_SPI_RES(OLED_SPI_RES)
   );
 `endif
+
+`ifdef sdcard
+  sdcard sd (
+    .clk(CLK),
+    .resetn(resetn),
+    .iomem_valid(iomem_valid && sdcard_en),
+    .iomem_wstrb(iomem_wstrb),
+    .iomem_addr(iomem_addr),
+    .iomem_wdata(iomem_wdata),
+    .iomem_rdata(sdcard_iomem_rdata),
+    .iomem_ready(sdcard_iomem_ready),
+    .SD_MOSI(SD_MOSI),
+    .SD_MISO(SD_MISO),
+    .SD_SCK(SD_SCK),
+    .SD_CS(SD_CS)
+  );
+`endif
+
+  wire sdcard_iomem_ready;
+  wire [31:0] sdcard_iomem_rdata;
 
 `ifdef ili9341
       video_vga vga_video_peripheral(
@@ -254,10 +282,14 @@ assign iomem_ready = i2c_en ? i2c_iomem_ready : gpio_en ? gpio_iomem_ready
 `ifdef oled
                      : video_en ? oled_iomem_ready
 `endif
+`ifdef sdcard
+                     : sdcard_en ? sdcard_iomem_ready
+`endif
                      : 1'b1;
 
 assign iomem_rdata =  i2c_iomem_ready ? i2c_iomem_rdata
                     : gpio_iomem_ready ? gpio_iomem_rdata
+                    : sdcard_iomem_ready ? sdcard_iomem_rdata
                     : 32'h0;
 
 picosoc #(

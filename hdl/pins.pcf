@@ -59,6 +59,11 @@ set_io -nowarn BUTTONS[2] A7   # PIN 22
 set_io -nowarn BUTTONS[1] B7   # PIN 21
 set_io -nowarn BUTTONS[0] A8   # PIN 20
 
+set_io -nowarn SD_MISO B6
+set_io -nowarn SD_MOSI A7
+set_io -nowarn SD_SCK B7
+set_io -nowarn SD_CS A8
+
 # OLED SPI
 set_io -nowarn OLED_SPI_CS H9  # PIN 14
 set_io -nowarn OLED_SPI_DC D9  # PIN 15
