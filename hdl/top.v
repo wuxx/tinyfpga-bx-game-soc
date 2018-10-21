@@ -70,9 +70,6 @@ module top (
 	output lcd_D7,
 	output lcd_nreset,
         output lcd_cmd_data,
-        output lcd_ncs,
-        output lcd_backlight,
-        output lcd_read_edge,
         output lcd_write_edge,
 `endif
 
@@ -87,9 +84,6 @@ module top (
 	output lcd_D7,
 	output lcd_nreset,
         output lcd_cmd_data,
-        output lcd_ncs,
-        output lcd_backlight,
-        output lcd_read_edge,
         output lcd_write_edge,
 `elsif vga
     output VGA_VSYNC,
@@ -207,10 +201,7 @@ module top (
                 .iomem_ready(ili_direct_iomem_ready),
                 .nreset(lcd_nreset),
                 .cmd_data(lcd_cmd_data),
-                .ncs(lcd_ncs),
                 .write_edge(lcd_write_edge),
-                .read_edge(lcd_read_edge),
-                .backlight(lcd_backlight),
                 .dout({lcd_D0, lcd_D1, lcd_D2, lcd_D3,
                        lcd_D4, lcd_D5, lcd_D6, lcd_D7}));
 `endif
@@ -246,10 +237,7 @@ module top (
       		.iomem_wdata(iomem_wdata),
                 .nreset(lcd_nreset),
                 .cmd_data(lcd_cmd_data),
-		.ncs(lcd_ncs),
 		.write_edge(lcd_write_edge),
-		.read_edge(lcd_read_edge),
-		.backlight(lcd_backlight),
 		.dout({lcd_D0, lcd_D1, lcd_D2, lcd_D3,
 		       lcd_D4, lcd_D5, lcd_D6, lcd_D7})
       );

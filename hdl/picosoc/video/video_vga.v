@@ -17,10 +17,7 @@ module video_vga
 `ifdef ili9341
   output reg       nreset,
   output reg       cmd_data, // 1 => Data, 0 => Command
-  output           ncs, // Chip select (low enable)
   output reg       write_edge, // Write signal on rising edge
-  output           read_edge, // Read signal on rising edge
-  output           backlight,
  output reg [7:0] dout);
 `else
   output vga_hsync,
@@ -195,10 +192,7 @@ module video_vga
                 .clk_16MHz (clk),
                 .nreset (nreset),
                 .cmd_data (cmd_data),
-                .ncs (ncs),
                 .write_edge (write_edge),
-                .read_edge (read_edge),
-                .backlight (backlight),
                 .dout (dout),
                 .reset_cursor (reset_cursor),
                 .pix_data ({vga_b?5'b11111:5'b0,

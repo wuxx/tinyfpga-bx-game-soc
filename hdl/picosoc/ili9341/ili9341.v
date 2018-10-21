@@ -3,10 +3,7 @@ module ili9341 (
            input            clk_16MHz,
            output reg       nreset,
            output reg       cmd_data, // 1 => Data, 0 => Command
-           output           ncs, // Chip select (low enable)
            output reg       write_edge, // Write signal on rising edge
-           output           read_edge, // Read signal on rising edge
-           output           backlight,
            output reg [7:0] dout,
 
            input            reset_cursor,
@@ -14,7 +11,6 @@ module ili9341 (
            input            pix_clk,
            output           busy
            );
-
 
    parameter  clk_freq = 16000000;
    parameter  tx_clk_freq = 16000000;
@@ -24,10 +20,6 @@ module ili9341 (
    localparam ms120 = 0.120 / sec_per_tick;
    localparam ms50  = 0.050 / sec_per_tick;
    localparam ms5   = 0.005 / sec_per_tick;
-
-   assign backlight = 1;
-   assign ncs = 0;
-   assign read_edge = 1;
 
    // Init Sequence Data (based upon
    // https://github.com/thekroko/ili9341_fpga/blob/master/tft_ili9341.sv)
