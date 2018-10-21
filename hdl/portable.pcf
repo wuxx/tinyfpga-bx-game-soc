@@ -41,7 +41,7 @@
 set_io -nowarn AUDIO_LEFT  A2    # pin 1
 set_io -nowarn AUDIO_RIGHT A1    # pin 2
 
-set_io -nowarn SER_RX B1         # pin 3
+set_io -nowarn SER_RX J4         # pin 27
 set_io -nowarn SER_TX C2         # pin 4
 
 # Buttons
@@ -53,10 +53,10 @@ set_io -nowarn BUTTONS[3] E1   # PIN 9
 set_io -nowarn BUTTONS[2] G2   # PIN 10
 
 # SD card reader
-set_io -nowarn SD_CS B1          # pin 3
-set_io -nowarn SD_SCK H1         # pin 11
-set_io -nowarn SD_MISO J1        # pin 12
-set_io -nowarn SD_MOSI D9        # pin 15
+set_io -nowarn SD_CS H1          # pin 11
+set_io -nowarn SD_SCK B1         # pin 3
+set_io -nowarn SD_MISO D9        # pin 15
+set_io -nowarn SD_MOSI J1        # pin 12
 
 # LCD screen
 set_io -nowarn lcd_write_edge H2 # pin 13
@@ -87,7 +87,6 @@ set_io -nowarn SPI_IO3 J8
 set_io -nowarn BUTTONS[1] G1   # PIN 25
 set_io -nowarn BUTTONS[0] J3   # PIN 26
 
-#set_io -nowarn PIN_27 J4
 #set_io -nowarn PIN_28 G9
 #set_io -nowarn PIN_29 J9
 #set_io -nowarn PIN_30 E8
