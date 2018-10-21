@@ -51,6 +51,14 @@ extern uint32_t sram;
 #define ILI9341_MADCTL_BGR 0x08
 #define ILI9341_MADCTL_MH  0x04
 
+// Buttons
+#define BUTTON_UP 0x04
+#define BUTTON_DOWN 0x10
+#define BUTTON_LEFT 0x80
+#define BUTTON_RIGHT 0x08
+#define BUTTON_B 0x20
+#define BUTTON_A 0x40
+
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"
     "set_irq_mask:\n"
@@ -204,10 +212,35 @@ void main() {
 
     init();
 
-    clearScreen(0x001F);
+    clearScreen(0x6E5D);
 
+    char *games[] = {"Pac Man", "Tetris", "Frogger", "Super Marion Bros"};
+    int num_games = 4;
+
+    drawText(80,40,"Choose a game :", 0x00A0, 0x6E5D);
+
+    for(int i=0;i<num_games;i++) 
+      drawText(92, 80 + i*20, games[i], 0xD0B7, 0x6E5D);
+
+    drawText(80, 80, "* ",  0xD0B7, 0x6E5D);
+
+    int index = 0, old_index;
+    uint8_t buttons = 0, old_buttons;
+ 
     while (1) {
-      delay(100);
-      drawText(100, 80, "Hello World!", 0xF100, 0x001F);
+      old_buttons = buttons;
+      buttons = reg_buttons;
+      
+      old_index = index;
+
+      if ((buttons & BUTTON_B))  
+        if (++index == num_games) index = 0;
+  
+      if (index != old_index) {
+        drawText(80, 80 + (old_index*20), "  ", 0xD0B7, 0x6E5D);
+        drawText(80, 80 + (index*20), "* ", 0xD0B7, 0x6E5D);
+      }
+
+      delay(5);
     } 
 }
