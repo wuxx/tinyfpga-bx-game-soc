@@ -59,6 +59,23 @@ module top (
     inout SD_CS,
 `endif
 
+`ifdef ili9341_direct
+        output lcd_D0,
+	output lcd_D1,
+	output lcd_D2,
+	output lcd_D3,
+	output lcd_D4,
+	output lcd_D5,
+	output lcd_D6,
+	output lcd_D7,
+	output lcd_nreset,
+        output lcd_cmd_data,
+        output lcd_ncs,
+        output lcd_backlight,
+        output lcd_read_edge,
+        output lcd_write_edge,
+`endif
+
 `ifdef ili9341
         output lcd_D0,
 	output lcd_D1,
@@ -177,7 +194,30 @@ module top (
   );
 `endif
 
+  wire ili_direct_iomem_ready;
+
+`ifdef ili9341_direct
+      ili9341_direct lcd_peripheral(
+                .clk(CLK),
+                .resetn(resetn),
+                .iomem_valid(iomem_valid && video_en),
+                .iomem_wstrb(iomem_wstrb),
+                .iomem_addr(iomem_addr),
+                .iomem_wdata(iomem_wdata),
+                .iomem_ready(ili_direct_iomem_ready),
+                .nreset(lcd_nreset),
+                .cmd_data(lcd_cmd_data),
+                .ncs(lcd_ncs),
+                .write_edge(lcd_write_edge),
+                .read_edge(lcd_read_edge),
+                .backlight(lcd_backlight),
+                .dout({lcd_D0, lcd_D1, lcd_D2, lcd_D3,
+                       lcd_D4, lcd_D5, lcd_D6, lcd_D7}));
+`endif
+
 `ifdef sdcard
+  wire [31:0] sdcard_iomem_rdata;
+
   sdcard sd (
     .clk(CLK),
     .resetn(resetn),
@@ -195,7 +235,6 @@ module top (
 `endif
 
   wire sdcard_iomem_ready;
-  wire [31:0] sdcard_iomem_rdata;
 
 `ifdef ili9341
       video_vga vga_video_peripheral(
@@ -282,6 +321,9 @@ assign iomem_ready = i2c_en ? i2c_iomem_ready : gpio_en ? gpio_iomem_ready
 `ifdef oled
                      : video_en ? oled_iomem_ready
 `endif
+`ifdef ili9341_direct
+                     : video_en ? ili_direct_iomem_ready
+`endif
 `ifdef sdcard
                      : sdcard_en ? sdcard_iomem_ready
 `endif
@@ -289,7 +331,9 @@ assign iomem_ready = i2c_en ? i2c_iomem_ready : gpio_en ? gpio_iomem_ready
 
 assign iomem_rdata =  i2c_iomem_ready ? i2c_iomem_rdata
                     : gpio_iomem_ready ? gpio_iomem_rdata
+`ifdef sdcard
                     : sdcard_iomem_ready ? sdcard_iomem_rdata
+`endif
                     : 32'h0;
 
 picosoc #(
