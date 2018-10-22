@@ -15,6 +15,7 @@ extern uint32_t sram;
 #define reg_dc (*(volatile uint32_t*)0x05000008)
 #define reg_rst (*(volatile uint32_t*)0x0500000c)
 #define reg_xfer (*(volatile uint32_t*)0x05000000)
+#define reg_fast_xfer (*(volatile uint32_t*)0x05000004)
 
 #define reg_sdcard_cs (*(volatile uint32_t*)0x06000004)
 #define reg_sdcard_xfer (*(volatile uint32_t*)0x06000008)
@@ -160,15 +161,15 @@ void clear(uint16_t c, int s, int w) {
         uint8_t c2 = c;
 
         reg_dc = 1;
-        for(int i=0; i< HEIGHT*w; i++) {
+        /*for(int i=0; i< HEIGHT*w; i++) {
         	reg_xfer = c1;
         	reg_xfer = c2;
-	}
+	}*/
+        reg_fast_xfer = ((HEIGHT*w) << 16) | c;
 }
 
 void clearScreen(uint16_t c) {
-  clear(c, 0, 320); // Sometimes only draws 64 pixels wide
-  clear(c, 64, 256);
+  for (int i=0;i<4;i++) clear(c, i*80, 80); // Full screen write sometimnes fails
 }
 
 void drawPixel(int16_t x, int16_t y, uint16_t color) {
