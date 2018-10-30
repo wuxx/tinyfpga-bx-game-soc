@@ -238,8 +238,8 @@ module top (
                 .nreset(lcd_nreset),
                 .cmd_data(lcd_cmd_data),
 		.write_edge(lcd_write_edge),
-		.dout({lcd_D0, lcd_D1, lcd_D2, lcd_D3,
-		       lcd_D4, lcd_D5, lcd_D6, lcd_D7})
+		.dout({lcd_D7, lcd_D6, lcd_D5, lcd_D4,
+		       lcd_D3, lcd_D2, lcd_D1, lcd_D0})
       );
 `elsif vga
       video_vga vga_video_peripheral(

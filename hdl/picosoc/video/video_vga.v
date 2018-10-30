@@ -195,9 +195,9 @@ module video_vga
                 .write_edge (write_edge),
                 .dout (dout),
                 .reset_cursor (reset_cursor),
-                .pix_data ({vga_b?5'b11111:5'b0,
+                .pix_data ({vga_r?5'b11111:5'b0,
 			    vga_g?6'b111111:6'b0,
-			    vga_r?5'b11111:5'b0}),
+			    vga_b?5'b11111:5'b0}),
                 .pix_clk (pix_clk),
                 .busy (busy)
                 );
@@ -205,18 +205,18 @@ module video_vga
    always @(posedge clk) begin
       if (busy == 0 && pix_clk == 0) begin
 
-         if (xpos < 319) begin
-            if (ypos > 0) begin
-               ypos <= ypos - 2;
+         if (xpos > 0) begin
+            if (ypos < 478) begin
+               ypos <= ypos + 2;
             end else begin
-               ypos <= 478;
-               xpos <= xpos + 1;
+               ypos <= 0;
+               xpos <= xpos - 1;
             end
 
             pix_clk <= 1;
 
          end else begin
-            xpos <= 0;
+            xpos <= 319;
             reset_cursor <= 1;
          end
 

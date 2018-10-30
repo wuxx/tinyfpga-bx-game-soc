@@ -7,6 +7,7 @@
 #include <uart/uart.h>
 #include <sine_table/sine_table.h>
 #include <nunchuk/nunchuk.h>
+#include <button/button.h>
 
 #include "graphics_data.h"
 
@@ -21,18 +22,8 @@ extern uint32_t sram;
 
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
-#define reg_buttons  (*(volatile uint32_t*)0x03000000)
 
 extern const struct song_t song_pacman;
-
-// Buttons
-
-#define BUTTON_UP 0x04
-#define BUTTON_DOWN 0x10
-#define BUTTON_LEFT 0x80
-#define BUTTON_RIGHT 0x08
-#define BUTTON_B 0x20
-#define BUTTON_A 0x040
 
 // Board timensions
 #define TILE_SIZE 8
