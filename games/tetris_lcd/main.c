@@ -5,6 +5,7 @@
 #include <video/video.h>
 #include <songplayer/songplayer.h>
 #include <uart/uart.h>
+#include <button/button.h>
 
 #include "graphics_data.h"
 
@@ -14,15 +15,6 @@ extern uint32_t sram;
 
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
-#define reg_buttons  (*(volatile uint32_t*)0x03000000)
-
-// Buttons
-#define BUTTON_UP 0x04
-#define BUTTON_DOWN 0x10
-#define BUTTON_LEFT 0x80
-#define BUTTON_RIGHT 0x08
-#define BUTTON_B 0x20
-#define BUTTON_A 0x40
 
 #define BLANK_TILE 0
 #define ZERO_TILE 40

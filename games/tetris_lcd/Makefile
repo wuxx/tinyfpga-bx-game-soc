@@ -14,11 +14,11 @@ VERILOG_FILES = \
 	$(HDL_DIR)/picosoc/video/texture_memory.v \
 	$(HDL_DIR)/picosoc/video/tile_memory.v \
 	$(HDL_DIR)/picosoc/video/sprite.v \
+	$(HDL_DIR)/picosoc/gpio/gpio.v \
 	$(HDL_DIR)/picosoc/video/video_vga.v \
 	$(HDL_DIR)/picosoc/ili9341/ili9341.v \
-	$(HDL_DIR)/picosoc/gpio/gpio.v
 
-PCF_FILE = $(HDL_DIR)/portable.pcf
+PCF_FILE = $(HDL_DIR)/pcb.pcf
 LDS_FILE = $(FIRMWARE_DIR)/sections.lds
 START_FILE = $(FIRMWARE_DIR)/start.S
 C_FILES = main.c song_pacman.c \

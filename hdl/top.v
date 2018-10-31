@@ -60,31 +60,33 @@ module top (
 `endif
 
 `ifdef ili9341_direct
-        output lcd_D0,
-	output lcd_D1,
-	output lcd_D2,
-	output lcd_D3,
-	output lcd_D4,
-	output lcd_D5,
-	output lcd_D6,
-	output lcd_D7,
-	output lcd_nreset,
-        output lcd_cmd_data,
-        output lcd_write_edge,
+    output lcd_D0,
+    output lcd_D1,
+    output lcd_D2,
+    output lcd_D3,
+    output lcd_D4,
+    output lcd_D5,
+    output lcd_D6,
+    output lcd_D7,
+    output lcd_nreset,
+    output lcd_cmd_data,
+    output lcd_write_edge,
+    output lcd_backlight,
 `endif
 
 `ifdef ili9341
-        output lcd_D0,
-	output lcd_D1,
-	output lcd_D2,
-	output lcd_D3,
-	output lcd_D4,
-	output lcd_D5,
-	output lcd_D6,
-	output lcd_D7,
-	output lcd_nreset,
-        output lcd_cmd_data,
-        output lcd_write_edge,
+    output lcd_D0,
+    output lcd_D1,
+    output lcd_D2,
+    output lcd_D3,
+    output lcd_D4,
+    output lcd_D5,
+    output lcd_D6,
+    output lcd_D7,
+    output lcd_nreset,
+    output lcd_cmd_data,
+    output lcd_write_edge,
+    output lcd_backlight,
 `elsif vga
     output VGA_VSYNC,
     output VGA_HSYNC,
@@ -191,19 +193,22 @@ module top (
   wire ili_direct_iomem_ready;
 
 `ifdef ili9341_direct
-      ili9341_direct lcd_peripheral(
-                .clk(CLK),
-                .resetn(resetn),
-                .iomem_valid(iomem_valid && video_en),
-                .iomem_wstrb(iomem_wstrb),
-                .iomem_addr(iomem_addr),
-                .iomem_wdata(iomem_wdata),
-                .iomem_ready(ili_direct_iomem_ready),
-                .nreset(lcd_nreset),
-                .cmd_data(lcd_cmd_data),
-                .write_edge(lcd_write_edge),
-                .dout({lcd_D0, lcd_D1, lcd_D2, lcd_D3,
-                       lcd_D4, lcd_D5, lcd_D6, lcd_D7}));
+
+  assign lcd_backlight = 1;
+
+  ili9341_direct lcd_peripheral(
+    .clk(CLK),
+    .resetn(resetn),
+    .iomem_valid(iomem_valid && video_en),
+    .iomem_wstrb(iomem_wstrb),
+    .iomem_addr(iomem_addr),
+    .iomem_wdata(iomem_wdata),
+    .iomem_ready(ili_direct_iomem_ready),
+    .nreset(lcd_nreset),
+    .cmd_data(lcd_cmd_data),
+    .write_edge(lcd_write_edge),
+    .dout({lcd_D7, lcd_D6, lcd_D5, lcd_D4,
+           lcd_D3, lcd_D2, lcd_D1, lcd_D0}));
 `endif
 
 `ifdef sdcard
@@ -228,33 +233,36 @@ module top (
   wire sdcard_iomem_ready;
 
 `ifdef ili9341
-      video_vga vga_video_peripheral(
-      		.clk(CLK),
-      		.resetn(resetn),
-      		.iomem_valid(iomem_valid && video_en),
-      		.iomem_wstrb(iomem_wstrb),
-      		.iomem_addr(iomem_addr),
-      		.iomem_wdata(iomem_wdata),
-                .nreset(lcd_nreset),
-                .cmd_data(lcd_cmd_data),
-		.write_edge(lcd_write_edge),
-		.dout({lcd_D7, lcd_D6, lcd_D5, lcd_D4,
-		       lcd_D3, lcd_D2, lcd_D1, lcd_D0})
+
+  assign lcd_backlight = 1;
+
+  video_vga vga_video_peripheral(
+    .clk(CLK),
+    .resetn(resetn),
+    .iomem_valid(iomem_valid && video_en),
+    .iomem_wstrb(iomem_wstrb),
+    .iomem_addr(iomem_addr),
+    .iomem_wdata(iomem_wdata),
+    .nreset(lcd_nreset),
+    .cmd_data(lcd_cmd_data),
+    .write_edge(lcd_write_edge),
+    .dout({lcd_D7, lcd_D6, lcd_D5, lcd_D4,
+           lcd_D3, lcd_D2, lcd_D1, lcd_D0})
       );
 `elsif vga
-      video_vga vga_video_peripheral(
-      		.clk(CLK),
-      		.resetn(resetn),
-      		.iomem_valid(iomem_valid && video_en),
-      		.iomem_wstrb(iomem_wstrb),
-      		.iomem_addr(iomem_addr),
-      		.iomem_wdata(iomem_wdata),
-      		.vga_hsync(VGA_HSYNC),
-      		.vga_vsync(VGA_VSYNC),
-      		.vga_r(VGA_R),
-      		.vga_g(VGA_G),
-      		.vga_b(VGA_B)
-      	);
+  video_vga vga_video_peripheral(
+    .clk(CLK),
+    .resetn(resetn),
+    .iomem_valid(iomem_valid && video_en),
+    .iomem_wstrb(iomem_wstrb),
+    .iomem_addr(iomem_addr),
+    .iomem_wdata(iomem_wdata),
+    .vga_hsync(VGA_HSYNC),
+    .vga_vsync(VGA_VSYNC),
+    .vga_r(VGA_R),
+    .vga_g(VGA_G),
+    .vga_b(VGA_B)
+ );
 `endif
 
   wire [31:0] gpio_iomem_rdata;

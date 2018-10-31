@@ -10,15 +10,15 @@ module video_vga
 (
   input resetn,
   input clk,
-	input iomem_valid,
-	input [3:0]  iomem_wstrb,
-	input [31:0] iomem_addr,
-	input [31:0] iomem_wdata,
+  input iomem_valid,
+  input [3:0]  iomem_wstrb,
+  input [31:0] iomem_addr,
+  input [31:0] iomem_wdata,
 `ifdef ili9341
   output reg       nreset,
   output reg       cmd_data, // 1 => Data, 0 => Command
   output reg       write_edge, // Write signal on rising edge
- output reg [7:0] dout);
+  output reg [7:0] dout);
 `else
   output vga_hsync,
   output vga_vsync,
