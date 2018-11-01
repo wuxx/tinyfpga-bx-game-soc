@@ -113,7 +113,7 @@ void init() {
 	send_data(0xC0); 
 
 	send_cmd(ILI9341_MEMCONTROL); 
-	send_data(ILI9341_MADCTL_MV | ILI9341_MADCTL_BGR);
+	send_data(ILI9341_MADCTL_MV | ILI9341_MADCTL_MX | ILI9341_MADCTL_MY | ILI9341_MADCTL_BGR);
 
 	send_cmd(ILI9341_PIXELFORMAT); 
 	send_data(0x55);

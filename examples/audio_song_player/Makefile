@@ -7,9 +7,6 @@ VERILOG_FILES = \
 	$(HDL_DIR)/picosoc/uart/simpleuart.v \
 	$(HDL_DIR)/picosoc/picosoc.v \
 	$(HDL_DIR)/picorv32/picorv32.v \
-	$(HDL_DIR)/picosoc/gpio/gpio.v \
-        $(HDL_DIR)/picosoc/nunchuk/I2C_master.v \
-	$(HDL_DIR)/picosoc/i2c/i2c.v \
 	$(HDL_DIR)/picosoc/common/clock_divider.v \
 	$(HDL_DIR)/picosoc/audio/audio.v \
 	$(HDL_DIR)/picosoc/audio/pdm_dac.v \
@@ -19,6 +16,9 @@ VERILOG_FILES = \
 	$(HDL_DIR)/picosoc/video/sprite.v \
 	$(HDL_DIR)/picosoc/video/VGASyncGen.v \
 	$(HDL_DIR)/picosoc/video/video_vga.v \
+        $(HDL_DIR)/picosoc/nunchuk/I2C_master.v \
+	$(HDL_DIR)/picosoc/i2c/i2c.v \
+	$(HDL_DIR)/picosoc/gpio/gpio.v \
 
 PCF_FILE = $(HDL_DIR)/pins.pcf
 LDS_FILE = $(FIRMWARE_DIR)/sections.lds
