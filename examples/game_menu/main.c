@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <uart/uart.h>
+#include <button/button.h>
+
 #include "font.h"
 
 // a pointer to this is a null pointer, but the compiler does not
@@ -10,7 +12,6 @@ extern uint32_t sram;
 #define reg_spictrl (*(volatile uint32_t*)0x02000000)
 #define reg_uart_clkdiv (*(volatile uint32_t*)0x02000004)
 #define reg_leds (*(volatile uint32_t*)0x03000000)
-#define reg_buttons (*(volatile uint32_t*)0x03000004)
 
 #define reg_dc (*(volatile uint32_t*)0x05000008)
 #define reg_rst (*(volatile uint32_t*)0x0500000c)
@@ -55,14 +56,6 @@ extern uint32_t sram;
 #define ILI9341_MADCTL_RGB 0x00
 #define ILI9341_MADCTL_BGR 0x08
 #define ILI9341_MADCTL_MH  0x04
-
-// Buttons
-#define BUTTON_UP 0x04
-#define BUTTON_DOWN 0x10
-#define BUTTON_LEFT 0x80
-#define BUTTON_RIGHT 0x08
-#define BUTTON_B 0x20
-#define BUTTON_A 0x40
 
 uint32_t set_irq_mask(uint32_t mask); asm (
     ".global set_irq_mask\n"

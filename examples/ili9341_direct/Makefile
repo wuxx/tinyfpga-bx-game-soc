@@ -10,7 +10,7 @@ VERILOG_FILES = \
            $(HDL_DIR)/picosoc/ili9341/ili9341_direct.v \
            $(HDL_DIR)/picosoc/gpio/gpio.v
 
-PCF_FILE = $(HDL_DIR)/portable.pcf
+PCF_FILE = $(HDL_DIR)/pcb.pcf
 LDS_FILE = $(FIRMWARE_DIR)/sections.lds
 START_FILE = $(FIRMWARE_DIR)/start.S
 C_FILES = main.c $(INCLUDE_DIR)/uart/uart.c

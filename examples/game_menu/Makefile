@@ -12,7 +12,7 @@ VERILOG_FILES = \
            $(HDL_DIR)/picosoc/sdcard/sdcard.v \
            $(HDL_DIR)/picosoc/spi_master/spi_master.v
 
-PCF_FILE = $(HDL_DIR)/portable.pcf
+PCF_FILE = $(HDL_DIR)/pcbsd.pcf
 LDS_FILE = $(FIRMWARE_DIR)/sections.lds
 START_FILE = $(FIRMWARE_DIR)/start.S
 C_FILES = main.c $(INCLUDE_DIR)/uart/uart.c

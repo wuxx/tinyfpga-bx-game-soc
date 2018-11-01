@@ -63,13 +63,13 @@ set_io -nowarn X B8 # pin 19
 set_io -nowarn Y A9 # pin 18
 set_io -nowarn A C9 # pin 17
 set_io -nowarn B  D8 # pin 16
-set_io AUDIO_LEFT D9 # pin 15
-set_io AUDIO_RIGHT H9 # pin 14
+set_io -nowarn AUDIO_LEFT D9 # pin 15
+set_io -nowarn AUDIO_RIGHT H9 # pin 14
 
-set_io -nowarn BUTTONS[0] B6
-set_io -nowarn BUTTONS[1] A7
-set_io -nowarn BUTTONS[2] B7
-set_io -nowarn BUTTONS[3] A8
+set_io -nowarn BUTTONS[0] J3
+set_io -nowarn BUTTONS[1] J4
+set_io -nowarn BUTTONS[2] G9
+set_io -nowarn BUTTONS[3] J9
 set_io -nowarn BUTTONS[4] B8
 set_io -nowarn BUTTONS[5] A9
 set_io -nowarn BUTTONS[6] C9
