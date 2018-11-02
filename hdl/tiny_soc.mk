@@ -1,6 +1,9 @@
 upload: hardware.bin firmware.bin
 	tinyprog -p hardware.bin -u firmware.bin
 
+game: hardware.bin firmware.bin
+	cat hardware.bin $(HDL_DIR)/padding.bin firmware.bin >game.bin
+
 hardware.blif: $(VERILOG_FILES) 
 	yosys -f "verilog $(DEFINES)" -ql hardware.log -p 'synth_ice40 -top top -blif hardware.blif' $^
 
