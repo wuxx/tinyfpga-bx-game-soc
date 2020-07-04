@@ -1,0 +1,71 @@
+# Left side of board
+#set_io lcd_D0  A2    # pin 1
+#set_io lcd_D1 A1    # pin 2
+#set_io lcd_D2 B1      # pin 3
+#set_io lcd_D3 C2      # pin 4
+#set_io lcd_D4 C1      # pin 5
+#set_io lcd_D5 D2      # pin 6
+#set_io lcd_D6 D1      # pin 7
+#set_io lcd_D7 E2      # pin 8
+#set_io lcd_nreset E1      # pin 9
+#set_io -nowarn lcd_te G2      # pin 10
+#set_io lcd_cmd_data  H1 # pin 11
+#set_io lcd_write_edge  J1 # pin 12
+#set_io lcd_backlight H2 # pin 13
+
+
+# Right side of board
+set_io SER_TX 6 #DONE
+#set_io -nowarn UP B6 # pin 23
+#set_io -nowarn RIGHT A7 # pin 22
+#set_io -nowarn LEFT B7 # pin 21
+#set_io -nowarn DOWN A8 # pin 20
+#set_io -nowarn X B8 # pin 19
+#set_io -nowarn Y A9 # pin 18
+#set_io -nowarn A C9 # pin 17
+#set_io -nowarn B  D8 # pin 16
+#set_io AUDIO_LEFT D9 # pin 15
+#set_io AUDIO_RIGHT H9 # pin 14
+
+set_io -nowarn BUTTONS[0] 34 #DONE
+set_io -nowarn BUTTONS[1] 31 #DONE
+set_io -nowarn BUTTONS[2] 27 #DONE
+set_io -nowarn BUTTONS[3] 25 #DONE
+set_io -nowarn BUTTONS[4] 23 #DONE
+set_io -nowarn BUTTONS[5] 26 #DONE
+set_io -nowarn BUTTONS[6] 28 #DONE
+set_io -nowarn BUTTONS[7] 32 #DONE
+
+# SD card reader
+#set_io -nowarn SD_CS    21 #DONE
+#set_io -nowarn SD_SCK   20 #DONE
+#set_io -nowarn SD_MISO  19 #DONE
+#set_io -nowarn SD_MOSI  18 #DONE
+
+# SPI flash interface on bottom of board
+set_io --warn-no-port SPI_SS    16 #DONE
+set_io --warn-no-port SPI_SCK   15 #DONE
+set_io --warn-no-port SPI_IO0   17 #DONE
+set_io --warn-no-port SPI_IO1   14 #DONE
+set_io --warn-no-port SPI_IO2   12 #DONE
+set_io --warn-no-port SPI_IO3   13 #DONE
+
+# General purpose pins on bottom of board
+set_io SER_RX 4 #DONE
+#set_io --warn-no-port PIN_26 J3
+#set_io --warn-no-port PIN_27 J4
+#set_io --warn-no-port PIN_28 G9
+#set_io --warn-no-port PIN_29 J9
+#set_io --warn-no-port PIN_30 E8
+#set_io --warn-no-port PIN_31 J2
+
+# LED
+set_io --warn-no-port LED 41 #DONE
+
+# USB
+#set_io --warn-no-port USBP B4
+#set_io --warn-no-port USBN A4
+set_io --warn-no-port USBPU 11 #DONE
+
+# 16MHz clock
+set_io --warn-no-port CLK 35 # DONE
